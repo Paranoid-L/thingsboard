@@ -13,11 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.server.dao.service.psql;
+package org.thingsboard.server.transport.lwm2m.server.store;
 
-import org.thingsboard.server.dao.service.BaseEntityServiceTest;
-import org.thingsboard.server.dao.service.DaoPostgreSqlTest;
+import org.thingsboard.server.transport.lwm2m.server.model.LwM2MModelConfig;
 
-@DaoPostgreSqlTest
-public class EntityServicePostgreSqlTest extends BaseEntityServiceTest {
+import java.util.Collections;
+import java.util.List;
+
+public class TbDummyLwM2MModelConfigStore implements TbLwM2MModelConfigStore {
+    @Override
+    public List<LwM2MModelConfig> getAll() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public void put(LwM2MModelConfig modelConfig) {
+
+    }
+
+    @Override
+    public void remove(String endpoint) {
+
+    }
 }

@@ -13,16 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.thingsboard.server.queue.kafka;
+package org.thingsboard.server.dao.service.sql;
 
-import lombok.Data;
+import org.thingsboard.server.dao.service.BaseEntityServiceTest;
+import org.thingsboard.server.dao.service.DaoSqlTest;
 
-/**
- * Created by ashvayka on 25.09.18.
- */
-@Data
-public class TbKafkaProperty {
-
-    private String key;
-    private String value;
+@DaoSqlTest
+public class EntityServiceSqlTest extends BaseEntityServiceTest {
 }
