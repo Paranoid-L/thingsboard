@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 ///
 
 import { Injectable } from '@angular/core';
-import { Resolve } from '@angular/router';
+import { Resolve, Router } from '@angular/router';
 import {
   CellActionDescriptorType,
   DateEntityTableColumn,
@@ -49,6 +49,7 @@ export class OtaUpdateTableConfigResolve implements Resolve<EntityTableConfig<Ot
               private datePipe: DatePipe,
               private store: Store<AppState>,
               private otaPackageService: OtaPackageService,
+              private router: Router,
               private fileSize: FileSizePipe) {
     this.config.entityType = EntityType.OTA_PACKAGE;
     this.config.entityComponent = OtaUpdateComponent;
@@ -72,6 +73,7 @@ export class OtaUpdateTableConfigResolve implements Resolve<EntityTableConfig<Ot
           name: this.translate.instant('ota-update.copy-direct-url'),
           icon: 'content_paste',
           style: {
+            padding: '4px',
             'font-size': '16px',
             color: 'rgba(0,0,0,.87)'
           },
@@ -90,6 +92,7 @@ export class OtaUpdateTableConfigResolve implements Resolve<EntityTableConfig<Ot
         name: this.translate.instant('ota-update.copy-checksum'),
         icon: 'content_paste',
         style: {
+          padding: '4px',
           'font-size': '16px',
           color: 'rgba(0,0,0,.87)'
         },
@@ -127,6 +130,14 @@ export class OtaUpdateTableConfigResolve implements Resolve<EntityTableConfig<Ot
     return this.config;
   }
 
+  private openOtaPackage($event: Event, otaPackage: OtaPackageInfo) {
+    if ($event) {
+      $event.stopPropagation();
+    }
+    const url = this.router.createUrlTree(['otaUpdates', otaPackage.id.id]);
+    this.router.navigateByUrl(url);
+  }
+
   exportPackage($event: Event, otaPackageInfo: OtaPackageInfo) {
     if ($event) {
       $event.stopPropagation();
@@ -148,6 +159,9 @@ export class OtaUpdateTableConfigResolve implements Resolve<EntityTableConfig<Ot
 
   onPackageAction(action: EntityAction<OtaPackageInfo>): boolean {
     switch (action.action) {
+      case 'open':
+        this.openOtaPackage(action.event, action.entity);
+        return true;
       case 'uploadPackage':
         this.exportPackage(action.event, action.entity);
         return true;

@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -18,9 +18,9 @@ import { ChangeDetectorRef, Component, forwardRef, Input, OnDestroy } from '@ang
 import {
   AbstractControl,
   ControlValueAccessor,
-  FormArray,
-  FormBuilder,
-  FormGroup,
+  UntypedFormArray,
+  UntypedFormBuilder,
+  UntypedFormGroup,
   NG_VALIDATORS,
   NG_VALUE_ACCESSOR,
   ValidationErrors,
@@ -58,7 +58,7 @@ import { Subscription } from 'rxjs';
 
 export class Lwm2mObserveAttrTelemetryComponent implements ControlValueAccessor, OnDestroy, Validator {
 
-  modelsFormGroup: FormGroup;
+  modelsFormGroup: UntypedFormGroup;
 
   private requiredValue: boolean;
   get required(): boolean {
@@ -80,12 +80,14 @@ export class Lwm2mObserveAttrTelemetryComponent implements ControlValueAccessor,
   private valueChange$: Subscription = null;
   private propagateChange = (v: any) => { };
 
-  constructor(private fb: FormBuilder,
+  constructor(private fb: UntypedFormBuilder,
               private dialog: MatDialog,
               private cd: ChangeDetectorRef) {
     this.modelsFormGroup = this.fb.group({
       models: this.fb.array([])
     });
+
+    this.valueChange$ = this.modelsFormGroup.valueChanges.subscribe(value => this.updateModel(value.models));
   }
 
   ngOnDestroy() {
@@ -122,32 +124,26 @@ export class Lwm2mObserveAttrTelemetryComponent implements ControlValueAccessor,
     };
   }
 
-  get modelsFormArray(): FormArray {
-    return this.modelsFormGroup.get('models') as FormArray;
+  get modelsFormArray(): UntypedFormArray {
+    return this.modelsFormGroup.get('models') as UntypedFormArray;
   }
 
   private updateModels(models: ObjectLwM2M[]) {
     if (models.length === this.modelsFormArray.length) {
       this.modelsFormArray.patchValue(models, {emitEvent: false});
     } else {
-      if (this.valueChange$) {
-        this.valueChange$.unsubscribe();
-      }
       const modelControls: Array<AbstractControl> = [];
       models.forEach(model => {
         modelControls.push(this.createModelFormGroup(model));
       });
-      this.modelsFormGroup.setControl('models', this.fb.array(modelControls));
+      this.modelsFormGroup.setControl('models', this.fb.array(modelControls), {emitEvent: false});
       if (this.disabled) {
         this.modelsFormGroup.disable({emitEvent: false});
       }
-      this.valueChange$ = this.modelsFormGroup.valueChanges.subscribe(value => {
-        this.updateModel(value.models);
-      });
     }
   }
 
-  private createModelFormGroup(objectLwM2M: ObjectLwM2M): FormGroup {
+  private createModelFormGroup(objectLwM2M: ObjectLwM2M): UntypedFormGroup {
     return this.fb.group({
       id: [objectLwM2M.id],
       keyId: [objectLwM2M.keyId],
@@ -185,13 +181,13 @@ export class Lwm2mObserveAttrTelemetryComponent implements ControlValueAccessor,
    * If the Object field “Mandatory” is “Mandatory” and the Object field “Instances” is “Single” then -
    * the number of Object Instance MUST be 1.
    * 1. <MultipleInstances> == Multiple (true), <Mandatory>  == Optional  (false) -
-   *   Object Instance ID MIN_ID=0 MAX_ID=65535 (может ни одного не быть)
+   *   Object Instance ID MIN_ID=0 MAX_ID=65535 (there may be none)
    * 2. <MultipleInstances> == Multiple (true), <Mandatory>  == Mandatory (true) -
-   *   Object Instance ID MIN_ID=0 MAX_ID=65535 (min один обязательный)
+   *   Object Instance ID MIN_ID=0 MAX_ID=65535 (min one mandatory)
    * 3. <MultipleInstances> == Single   (false), <Mandatory> == Optional  (false) -
-   *   Object Instance ID cnt_max = 1 cnt_min = 0 (может ни одного не быть)
+   *   Object Instance ID cnt_max = 1 cnt_min = 0 (there may be none )
    * 4. <MultipleInstances> == Single   (false), <Mandatory> == Mandatory (true) -
-   *   Object Instance ID cnt_max = cnt_min = 1 (всегда есть один)
+   *   Object Instance ID cnt_max = cnt_min = 1 (there must always be one)
    */
 
   addInstances = ($event: Event, control: AbstractControl): void => {

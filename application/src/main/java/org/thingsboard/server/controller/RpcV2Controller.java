@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,21 +38,21 @@ import org.thingsboard.server.common.data.exception.ThingsboardException;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.RpcId;
 import org.thingsboard.server.common.data.id.TenantId;
+import org.thingsboard.server.common.data.msg.TbMsgType;
 import org.thingsboard.server.common.data.page.PageData;
 import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.common.data.rpc.Rpc;
 import org.thingsboard.server.common.data.rpc.RpcStatus;
 import org.thingsboard.server.common.msg.TbMsg;
 import org.thingsboard.server.common.msg.TbMsgMetaData;
+import org.thingsboard.server.exception.ToErrorResponseEntity;
 import org.thingsboard.server.queue.util.TbCoreComponent;
-import org.thingsboard.server.service.rpc.RemoveRpcActorMsg;
+import org.thingsboard.server.common.msg.rpc.RemoveRpcActorMsg;
 import org.thingsboard.server.service.security.permission.Operation;
-import org.thingsboard.server.service.telemetry.exception.ToErrorResponseEntity;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
 
-import static org.thingsboard.server.common.data.DataConstants.RPC_DELETED;
 import static org.thingsboard.server.controller.ControllerConstants.DEVICE_ID;
 import static org.thingsboard.server.controller.ControllerConstants.DEVICE_ID_PARAM_DESCRIPTION;
 import static org.thingsboard.server.controller.ControllerConstants.MARKDOWN_CODE_BLOCK_END;
@@ -159,12 +159,8 @@ public class RpcV2Controller extends AbstractRpcController {
             @ApiParam(value = RPC_ID_PARAM_DESCRIPTION, required = true)
             @PathVariable(RPC_ID) String strRpc) throws ThingsboardException {
         checkParameter("RpcId", strRpc);
-        try {
-            RpcId rpcId = new RpcId(UUID.fromString(strRpc));
-            return checkRpcId(rpcId, Operation.READ);
-        } catch (Exception e) {
-            throw handleException(e);
-        }
+        RpcId rpcId = new RpcId(UUID.fromString(strRpc));
+        return checkRpcId(rpcId, Operation.READ);
     }
 
     @ApiOperation(value = "Get persistent RPC requests", notes = "Allows to query RPC calls for specific device using pagination." + TENANT_OR_CUSTOMER_AUTHORITY_PARAGRAPH)
@@ -178,8 +174,8 @@ public class RpcV2Controller extends AbstractRpcController {
             @RequestParam int pageSize,
             @ApiParam(value = PAGE_NUMBER_DESCRIPTION, required = true)
             @RequestParam int page,
-            @ApiParam(value = "Status of the RPC", required = true, allowableValues = RPC_STATUS_ALLOWABLE_VALUES)
-            @RequestParam RpcStatus rpcStatus,
+            @ApiParam(value = "Status of the RPC", allowableValues = RPC_STATUS_ALLOWABLE_VALUES)
+            @RequestParam(required = false) RpcStatus rpcStatus,
             @ApiParam(value = RPC_TEXT_SEARCH_DESCRIPTION)
             @RequestParam(required = false) String textSearch,
             @ApiParam(value = SORT_PROPERTY_DESCRIPTION, allowableValues = RPC_SORT_PROPERTY_ALLOWABLE_VALUES)
@@ -187,38 +183,39 @@ public class RpcV2Controller extends AbstractRpcController {
             @ApiParam(value = SORT_ORDER_DESCRIPTION, allowableValues = SORT_ORDER_ALLOWABLE_VALUES)
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         checkParameter("DeviceId", strDeviceId);
-        try {
-            if (rpcStatus.equals(RpcStatus.DELETED)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RpcStatus: DELETED");
+        if (rpcStatus != null && rpcStatus.equals(RpcStatus.DELETED)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RpcStatus: DELETED");
+        }
+
+        TenantId tenantId = getCurrentUser().getTenantId();
+        PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        DeviceId deviceId = new DeviceId(UUID.fromString(strDeviceId));
+        final DeferredResult<ResponseEntity> response = new DeferredResult<>();
+
+        accessValidator.validate(getCurrentUser(), Operation.RPC_CALL, deviceId, new HttpValidationCallback(response, new FutureCallback<>() {
+            @Override
+            public void onSuccess(@Nullable DeferredResult<ResponseEntity> result) {
+                PageData<Rpc> rpcCalls;
+                if (rpcStatus != null) {
+                    rpcCalls = rpcService.findAllByDeviceIdAndStatus(tenantId, deviceId, rpcStatus, pageLink);
+                } else {
+                    rpcCalls = rpcService.findAllByDeviceId(tenantId, deviceId, pageLink);
+                }
+                response.setResult(new ResponseEntity<>(rpcCalls, HttpStatus.OK));
             }
 
-            TenantId tenantId = getCurrentUser().getTenantId();
-            PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
-            DeviceId deviceId = new DeviceId(UUID.fromString(strDeviceId));
-            final DeferredResult<ResponseEntity> response = new DeferredResult<>();
-
-            accessValidator.validate(getCurrentUser(), Operation.RPC_CALL, deviceId, new HttpValidationCallback(response, new FutureCallback<>() {
-                @Override
-                public void onSuccess(@Nullable DeferredResult<ResponseEntity> result) {
-                    PageData<Rpc> rpcCalls = rpcService.findAllByDeviceIdAndStatus(tenantId, deviceId, rpcStatus, pageLink);
-                    response.setResult(new ResponseEntity<>(rpcCalls, HttpStatus.OK));
+            @Override
+            public void onFailure(Throwable e) {
+                ResponseEntity entity;
+                if (e instanceof ToErrorResponseEntity) {
+                    entity = ((ToErrorResponseEntity) e).toErrorResponseEntity();
+                } else {
+                    entity = new ResponseEntity(HttpStatus.UNAUTHORIZED);
                 }
-
-                @Override
-                public void onFailure(Throwable e) {
-                    ResponseEntity entity;
-                    if (e instanceof ToErrorResponseEntity) {
-                        entity = ((ToErrorResponseEntity) e).toErrorResponseEntity();
-                    } else {
-                        entity = new ResponseEntity(HttpStatus.UNAUTHORIZED);
-                    }
-                    response.setResult(entity);
-                }
-            }));
-            return response;
-        } catch (Exception e) {
-            throw handleException(e);
-        }
+                response.setResult(entity);
+            }
+        }));
+        return response;
     }
 
     @ApiOperation(value = "Delete persistent RPC", notes = "Deletes the persistent RPC request." + TENANT_AUTHORITY_PARAGRAPH)
@@ -229,25 +226,21 @@ public class RpcV2Controller extends AbstractRpcController {
             @ApiParam(value = RPC_ID_PARAM_DESCRIPTION, required = true)
             @PathVariable(RPC_ID) String strRpc) throws ThingsboardException {
         checkParameter("RpcId", strRpc);
-        try {
-            RpcId rpcId = new RpcId(UUID.fromString(strRpc));
-            Rpc rpc = checkRpcId(rpcId, Operation.DELETE);
+        RpcId rpcId = new RpcId(UUID.fromString(strRpc));
+        Rpc rpc = checkRpcId(rpcId, Operation.DELETE);
 
-            if (rpc != null) {
-                if (rpc.getStatus().equals(RpcStatus.QUEUED)) {
-                    RemoveRpcActorMsg removeMsg = new RemoveRpcActorMsg(getTenantId(), rpc.getDeviceId(), rpc.getUuidId());
-                    log.trace("[{}] Forwarding msg {} to queue actor!", rpc.getDeviceId(), rpc);
-                    tbClusterService.pushMsgToCore(removeMsg, null);
-                }
-
-                rpcService.deleteRpc(getTenantId(), rpcId);
-                rpc.setStatus(RpcStatus.DELETED);
-
-                TbMsg msg = TbMsg.newMsg(RPC_DELETED, rpc.getDeviceId(), TbMsgMetaData.EMPTY, JacksonUtil.toString(rpc));
-                tbClusterService.pushMsgToRuleEngine(getTenantId(), rpc.getDeviceId(), msg, null);
+        if (rpc != null) {
+            if (rpc.getStatus().isPushDeleteNotificationToCore()) {
+                RemoveRpcActorMsg removeMsg = new RemoveRpcActorMsg(getTenantId(), rpc.getDeviceId(), rpc.getUuidId());
+                log.trace("[{}] Forwarding msg {} to queue actor!", rpc.getDeviceId(), rpc);
+                tbClusterService.pushMsgToCore(removeMsg, null);
             }
-        } catch (Exception e) {
-            throw handleException(e);
+
+            rpcService.deleteRpc(getTenantId(), rpcId);
+            rpc.setStatus(RpcStatus.DELETED);
+
+            TbMsg msg = TbMsg.newMsg(TbMsgType.RPC_DELETED, rpc.getDeviceId(), TbMsgMetaData.EMPTY, JacksonUtil.toString(rpc));
+            tbClusterService.pushMsgToRuleEngine(getTenantId(), rpc.getDeviceId(), msg, null);
         }
     }
 }

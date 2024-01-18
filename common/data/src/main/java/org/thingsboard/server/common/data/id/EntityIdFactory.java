@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,18 @@ import java.util.UUID;
  */
 public class EntityIdFactory {
 
+    public static EntityId getByTypeAndUuid(int type, String uuid) {
+        return getByTypeAndUuid(EntityType.values()[type], UUID.fromString(uuid));
+    }
+
+    public static EntityId getByTypeAndUuid(int type, UUID uuid) {
+        return getByTypeAndUuid(EntityType.values()[type], uuid);
+    }
+
+    public static EntityId getByTypeAndUuid(String type, String uuid) {
+        return getByTypeAndUuid(EntityType.valueOf(type), UUID.fromString(uuid));
+    }
+
     public static EntityId getByTypeAndId(String type, String uuid) {
         return getByTypeAndUuid(EntityType.valueOf(type), UUID.fromString(uuid));
     }
@@ -40,7 +52,7 @@ public class EntityIdFactory {
     public static EntityId getByTypeAndUuid(EntityType type, UUID uuid) {
         switch (type) {
             case TENANT:
-                return new TenantId(uuid);
+                return TenantId.fromUUID(uuid);
             case CUSTOMER:
                 return new CustomerId(uuid);
             case USER:
@@ -65,6 +77,8 @@ public class EntityIdFactory {
                 return new WidgetTypeId(uuid);
             case DEVICE_PROFILE:
                 return new DeviceProfileId(uuid);
+            case ASSET_PROFILE:
+                return new AssetProfileId(uuid);
             case TENANT_PROFILE:
                 return new TenantProfileId(uuid);
             case API_USAGE_STATE:
@@ -77,12 +91,26 @@ public class EntityIdFactory {
                 return new EdgeId(uuid);
             case RPC:
                 return new RpcId(uuid);
+            case QUEUE:
+                return new QueueId(uuid);
+            case NOTIFICATION_TARGET:
+                return new NotificationTargetId(uuid);
+            case NOTIFICATION_REQUEST:
+                return new NotificationRequestId(uuid);
+            case NOTIFICATION_RULE:
+                return new NotificationRuleId(uuid);
+            case NOTIFICATION_TEMPLATE:
+                return new NotificationTemplateId(uuid);
+            case NOTIFICATION:
+                return new NotificationId(uuid);
         }
         throw new IllegalArgumentException("EntityType " + type + " is not supported!");
     }
 
     public static EntityId getByEdgeEventTypeAndUuid(EdgeEventType edgeEventType, UUID uuid) {
         switch (edgeEventType) {
+            case TENANT:
+                return new TenantId(uuid);
             case CUSTOMER:
                 return new CustomerId(uuid);
             case USER:
@@ -91,8 +119,6 @@ public class EntityIdFactory {
                 return new DashboardId(uuid);
             case DEVICE:
                 return new DeviceId(uuid);
-            case DEVICE_PROFILE:
-                return new DeviceProfileId(uuid);
             case ASSET:
                 return new AssetId(uuid);
             case ALARM:
@@ -105,8 +131,20 @@ public class EntityIdFactory {
                 return new WidgetsBundleId(uuid);
             case WIDGET_TYPE:
                 return new WidgetTypeId(uuid);
+            case DEVICE_PROFILE:
+                return new DeviceProfileId(uuid);
+            case ASSET_PROFILE:
+                return new AssetProfileId(uuid);
+            case TENANT_PROFILE:
+                return new TenantProfileId(uuid);
+            case OTA_PACKAGE:
+                return new OtaPackageId(uuid);
             case EDGE:
                 return new EdgeId(uuid);
+            case QUEUE:
+                return new QueueId(uuid);
+            case TB_RESOURCE:
+                return new TbResourceId(uuid);
         }
         throw new IllegalArgumentException("EdgeEventType " + edgeEventType + " is not supported!");
     }

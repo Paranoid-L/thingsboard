@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@ package org.thingsboard.rule.engine.profile;
 
 import com.google.gson.JsonParser;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.util.StringUtils;
+import org.thingsboard.common.util.JacksonUtil;
 import org.thingsboard.rule.engine.api.TbContext;
 import org.thingsboard.rule.engine.profile.state.PersistedAlarmState;
 import org.thingsboard.rule.engine.profile.state.PersistedDeviceState;
-import org.thingsboard.rule.engine.telemetry.TbMsgTimeseriesNode;
 import org.thingsboard.server.common.data.DataConstants;
 import org.thingsboard.server.common.data.Device;
 import org.thingsboard.server.common.data.DeviceProfile;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.alarm.Alarm;
 import org.thingsboard.server.common.data.device.profile.AlarmConditionFilterKey;
 import org.thingsboard.server.common.data.device.profile.AlarmConditionKeyType;
@@ -40,10 +40,8 @@ import org.thingsboard.server.common.data.query.EntityKey;
 import org.thingsboard.server.common.data.query.EntityKeyType;
 import org.thingsboard.server.common.data.rule.RuleNodeState;
 import org.thingsboard.server.common.msg.TbMsg;
-import org.thingsboard.server.common.msg.session.SessionMsgType;
-import org.thingsboard.server.common.transport.adaptor.JsonConverter;
+import org.thingsboard.server.common.adaptor.JsonConverter;
 import org.thingsboard.server.dao.sql.query.EntityKeyMapping;
-import org.thingsboard.common.util.JacksonUtil;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,6 +53,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+
+import static org.thingsboard.server.common.data.msg.TbMsgType.ACTIVITY_EVENT;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ALARM_ACK;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ALARM_CLEAR;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ALARM_DELETE;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ATTRIBUTES_DELETED;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ATTRIBUTES_UPDATED;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ENTITY_ASSIGNED;
+import static org.thingsboard.server.common.data.msg.TbMsgType.ENTITY_UNASSIGNED;
+import static org.thingsboard.server.common.data.msg.TbMsgType.INACTIVITY_EVENT;
+import static org.thingsboard.server.common.data.msg.TbMsgType.POST_ATTRIBUTES_REQUEST;
+import static org.thingsboard.server.common.data.msg.TbMsgType.POST_TELEMETRY_REQUEST;
 
 @Slf4j
 class DeviceState {
@@ -137,24 +147,24 @@ class DeviceState {
             latestValues = fetchLatestValues(ctx, deviceId);
         }
         boolean stateChanged = false;
-        if (msg.getType().equals(SessionMsgType.POST_TELEMETRY_REQUEST.name())) {
+        if (msg.isTypeOf(POST_TELEMETRY_REQUEST)) {
             stateChanged = processTelemetry(ctx, msg);
-        } else if (msg.getType().equals(SessionMsgType.POST_ATTRIBUTES_REQUEST.name())) {
+        } else if (msg.isTypeOf(POST_ATTRIBUTES_REQUEST)) {
             stateChanged = processAttributesUpdateRequest(ctx, msg);
-        } else if (msg.getType().equals(DataConstants.ACTIVITY_EVENT) || msg.getType().equals(DataConstants.INACTIVITY_EVENT)) {
+        } else if (msg.isTypeOneOf(ACTIVITY_EVENT, INACTIVITY_EVENT)) {
             stateChanged = processDeviceActivityEvent(ctx, msg);
-        } else if (msg.getType().equals(DataConstants.ATTRIBUTES_UPDATED)) {
+        } else if (msg.isTypeOf(ATTRIBUTES_UPDATED)) {
             stateChanged = processAttributesUpdateNotification(ctx, msg);
-        } else if (msg.getType().equals(DataConstants.ATTRIBUTES_DELETED)) {
+        } else if (msg.isTypeOf(ATTRIBUTES_DELETED)) {
             stateChanged = processAttributesDeleteNotification(ctx, msg);
-        } else if (msg.getType().equals(DataConstants.ALARM_CLEAR)) {
+        } else if (msg.isTypeOf(ALARM_CLEAR)) {
             stateChanged = processAlarmClearNotification(ctx, msg);
-        } else if (msg.getType().equals(DataConstants.ALARM_ACK)) {
+        } else if (msg.isTypeOf(ALARM_ACK)) {
             processAlarmAckNotification(ctx, msg);
-        } else if (msg.getType().equals(DataConstants.ALARM_DELETE)) {
+        } else if (msg.isTypeOf(ALARM_DELETE)) {
             processAlarmDeleteNotification(ctx, msg);
         } else {
-            if (msg.getType().equals(DataConstants.ENTITY_ASSIGNED) || msg.getType().equals(DataConstants.ENTITY_UNASSIGNED)) {
+            if (msg.isTypeOneOf(ENTITY_ASSIGNED, ENTITY_UNASSIGNED)) {
                 dynamicPredicateValueCtx.resetCustomer();
             }
             ctx.tellSuccess(msg);
@@ -198,7 +208,8 @@ class DeviceState {
 
     private void processAlarmDeleteNotification(TbContext ctx, TbMsg msg) {
         Alarm alarm = JacksonUtil.fromString(msg.getData(), Alarm.class);
-        alarmStates.values().removeIf(alarmState -> alarmState.getCurrentAlarm().getId().equals(alarm.getId()));
+        alarmStates.values().removeIf(alarmState -> alarmState.getCurrentAlarm() != null
+                && alarmState.getCurrentAlarm().getId().equals(alarm.getId()));
         ctx.tellSuccess(msg);
     }
 
@@ -213,18 +224,22 @@ class DeviceState {
     private boolean processAttributesDeleteNotification(TbContext ctx, TbMsg msg) throws ExecutionException, InterruptedException {
         boolean stateChanged = false;
         List<String> keys = new ArrayList<>();
-        new JsonParser().parse(msg.getData()).getAsJsonObject().get("attributes").getAsJsonArray().forEach(e -> keys.add(e.getAsString()));
+        JsonParser.parseString(msg.getData()).getAsJsonObject().get("attributes").getAsJsonArray().forEach(e -> keys.add(e.getAsString()));
         String scope = msg.getMetaData().getValue(DataConstants.SCOPE);
         if (StringUtils.isEmpty(scope)) {
             scope = DataConstants.CLIENT_SCOPE;
         }
         if (!keys.isEmpty()) {
             EntityKeyType keyType = getKeyTypeFromScope(scope);
-            keys.forEach(key -> latestValues.removeValue(new EntityKey(keyType, key)));
+            Set<AlarmConditionFilterKey> removedKeys = keys.stream().map(key -> new EntityKey(keyType, key))
+                    .peek(latestValues::removeValue)
+                    .map(DataSnapshot::toConditionKey).collect(Collectors.toSet());
+            SnapshotUpdate update = new SnapshotUpdate(AlarmConditionKeyType.ATTRIBUTE, removedKeys);
+
             for (DeviceProfileAlarm alarm : deviceProfile.getAlarmSettings()) {
                 AlarmState alarmState = alarmStates.computeIfAbsent(alarm.getId(),
                         a -> new AlarmState(this.deviceProfile, deviceId, alarm, getOrInitPersistedAlarmState(alarm), dynamicPredicateValueCtx));
-                stateChanged |= alarmState.process(ctx, msg, latestValues, null);
+                stateChanged |= alarmState.process(ctx, msg, latestValues, update);
             }
         }
         ctx.tellSuccess(msg);
@@ -237,7 +252,7 @@ class DeviceState {
 
     private boolean processAttributes(TbContext ctx, TbMsg msg, String scope) throws ExecutionException, InterruptedException {
         boolean stateChanged = false;
-        Set<AttributeKvEntry> attributes = JsonConverter.convertToAttributes(new JsonParser().parse(msg.getData()));
+        Set<AttributeKvEntry> attributes = JsonConverter.convertToAttributes(JsonParser.parseString(msg.getData()));
         if (!attributes.isEmpty()) {
             SnapshotUpdate update = merge(latestValues, attributes, scope);
             for (DeviceProfileAlarm alarm : deviceProfile.getAlarmSettings()) {
@@ -252,7 +267,7 @@ class DeviceState {
 
     protected boolean processTelemetry(TbContext ctx, TbMsg msg) throws ExecutionException, InterruptedException {
         boolean stateChanged = false;
-        Map<Long, List<KvEntry>> tsKvMap = JsonConverter.convertToSortedTelemetry(new JsonParser().parse(msg.getData()), TbMsgTimeseriesNode.getTs(msg));
+        Map<Long, List<KvEntry>> tsKvMap = JsonConverter.convertToSortedTelemetry(JsonParser.parseString(msg.getData()), msg.getMetaDataTs());
         // iterate over data by ts (ASC order).
         for (Map.Entry<Long, List<KvEntry>> entry : tsKvMap.entrySet()) {
             Long ts = entry.getKey();

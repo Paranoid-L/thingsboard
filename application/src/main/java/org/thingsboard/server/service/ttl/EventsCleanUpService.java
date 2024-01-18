@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.thingsboard.server.dao.event.EventService;
 import org.thingsboard.server.queue.discovery.PartitionService;
-import org.thingsboard.server.queue.util.TbCoreComponent;
-import org.thingsboard.server.service.ttl.AbstractCleanUpService;
 
-@TbCoreComponent
+import java.util.concurrent.TimeUnit;
+
 @Slf4j
 @Service
 public class EventsCleanUpService extends AbstractCleanUpService {
@@ -33,10 +32,10 @@ public class EventsCleanUpService extends AbstractCleanUpService {
             "#{T(org.apache.commons.lang3.RandomUtils).nextLong(0, ${sql.ttl.events.execution_interval_ms})}";
 
     @Value("${sql.ttl.events.events_ttl}")
-    private long ttl;
+    private long ttlInSec;
 
     @Value("${sql.ttl.events.debug_events_ttl}")
-    private long debugTtl;
+    private long debugTtlInSec;
 
     @Value("${sql.ttl.events.enabled}")
     private boolean ttlTaskExecutionEnabled;
@@ -50,8 +49,11 @@ public class EventsCleanUpService extends AbstractCleanUpService {
 
     @Scheduled(initialDelayString = RANDOM_DELAY_INTERVAL_MS_EXPRESSION, fixedDelayString = "${sql.ttl.events.execution_interval_ms}")
     public void cleanUp() {
-        if (ttlTaskExecutionEnabled && isSystemTenantPartitionMine()) {
-            eventService.cleanupEvents(ttl, debugTtl);
+        if (ttlTaskExecutionEnabled) {
+            long ts = System.currentTimeMillis();
+            long regularEventExpTs = ttlInSec > 0 ? ts - TimeUnit.SECONDS.toMillis(ttlInSec) : 0;
+            long debugEventExpTs = debugTtlInSec > 0 ? ts - TimeUnit.SECONDS.toMillis(debugTtlInSec) : 0;
+            eventService.cleanupEvents(regularEventExpTs, debugEventExpTs, isSystemTenantPartitionMine());
         }
     }
 

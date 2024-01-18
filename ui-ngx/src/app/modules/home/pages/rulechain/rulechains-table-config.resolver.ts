@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import { RuleChainService } from '@core/http/rule-chain.service';
 import { RuleChainComponent } from '@modules/home/pages/rulechain/rulechain.component';
 import { DialogService } from '@core/services/dialog.service';
 import { RuleChainTabsComponent } from '@home/pages/rulechain/rulechain-tabs.component';
-import { ImportExportService } from '@home/components/import-export/import-export.service';
+import { ImportExportService } from '@shared/import-export/import-export.service';
 import { ItemBufferService } from '@core/services/item-buffer.service';
 import { EdgeService } from '@core/http/edge.service';
 import { forkJoin, Observable } from 'rxjs';
@@ -50,6 +50,7 @@ import { PageLink } from '@shared/models/page/page-link';
 import { Edge } from '@shared/models/edge.models';
 import { mergeMap } from 'rxjs/operators';
 import { PageData } from '@shared/models/page/page-data';
+import { HomeDialogsService } from '@home/dialogs/home-dialogs.service';
 
 @Injectable()
 export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<RuleChain>> {
@@ -63,6 +64,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
               private importExport: ImportExportService,
               private itembuffer: ItemBufferService,
               private edgeService: EdgeService,
+              private homeDialogs: HomeDialogsService,
               private translate: TranslateService,
               private datePipe: DatePipe,
               private router: Router) {
@@ -71,6 +73,8 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
     this.config.entityTabsComponent = RuleChainTabsComponent;
     this.config.entityTranslations = entityTypeTranslations.get(EntityType.RULE_CHAIN);
     this.config.entityResources = entityTypeResources.get(EntityType.RULE_CHAIN);
+
+    this.config.rowPointer = true;
 
     this.config.deleteEntityTitle = ruleChain => this.translate.instant('rulechain.delete-rulechain-title',
       {ruleChainName: ruleChain.name});
@@ -81,6 +85,14 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
     this.config.saveEntity = ruleChain => this.saveRuleChain(ruleChain);
     this.config.deleteEntity = id => this.ruleChainService.deleteRuleChain(id.id);
     this.config.onEntityAction = action => this.onRuleChainAction(action);
+    this.config.handleRowClick = ($event, ruleChain) => {
+      if (this.config.isDetailsOpen()) {
+        this.config.toggleEntityDetails($event, ruleChain);
+      } else {
+        this.openRuleChain($event, ruleChain);
+      }
+      return true;
+    };
   }
 
   resolve(route: ActivatedRouteSnapshot): EntityTableConfig<RuleChain> {
@@ -130,14 +142,10 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
       );
     } else if (ruleChainScope === 'edges') {
       columns.push(
-        new EntityTableColumn<RuleChain>('root', 'rulechain.edge-template-root', '60px',
-          entity => {
-            return checkBoxCell(entity.root);
-          }),
-        new EntityTableColumn<RuleChain>('assignToEdge', 'rulechain.assign-to-edge', '60px',
-          entity => {
-            return checkBoxCell(this.isAutoAssignToEdgeRuleChain(entity));
-          })
+        new EntityTableColumn<RuleChain>('root', 'rulechain.edge-template-root', '100px',
+          entity => checkBoxCell(entity.root)),
+        new EntityTableColumn<RuleChain>('assignToEdge', 'rulechain.assign-to-edge', '100px',
+          entity => checkBoxCell(this.isAutoAssignToEdgeRuleChain(entity)), () => ({}), false)
       );
     }
     return columns;
@@ -151,7 +159,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
           name: this.translate.instant('rulechain.create-new-rulechain'),
           icon: 'insert_drive_file',
           isEnabled: () => true,
-          onAction: ($event) => this.config.table.addEntity($event)
+          onAction: ($event) => this.config.getTable().addEntity($event)
         },
         {
           name: this.translate.instant('rulechain.import'),
@@ -164,10 +172,10 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
     if (ruleChainScope === 'edge') {
       actions.push(
         {
-          name: this.translate.instant('rulechain.assign-new-rulechain'),
+          name: this.translate.instant('rulechain.assign-to-edge'),
           icon: 'add',
           isEnabled: () => true,
-          onAction: ($event) => this.addRuleChainsToEdge($event)
+          onAction: ($event) => this.assignRuleChainsToEdge($event)
         }
       );
     }
@@ -190,7 +198,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
     } else if (ruleChainScope === 'edges') {
       return this.translate.instant('edge.rulechain-templates');
     } else if (ruleChainScope === 'edge') {
-      return this.config.tableTitle = edge.name + ': ' + this.translate.instant('edge.rulechains');
+      return this.config.tableTitle = edge.name + ': ' + this.translate.instant('rulechain.rulechains');
     }
   }
 
@@ -212,12 +220,6 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
   configureCellActions(ruleChainScope: string): Array<CellActionDescriptor<RuleChain>> {
     const actions: Array<CellActionDescriptor<RuleChain>> = [];
     actions.push(
-      {
-        name: this.translate.instant('rulechain.open-rulechain'),
-        icon: 'settings_ethernet',
-        isEnabled: () => true,
-        onAction: ($event, entity) => this.openRuleChain($event, entity)
-      },
       {
         name: this.translate.instant('rulechain.export'),
         icon: 'file_download',
@@ -273,6 +275,14 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
         }
       );
     }
+    actions.push(
+      {
+        name: this.translate.instant('rulechain.rulechain-details'),
+          icon: 'edit',
+        isEnabled: () => true,
+        onAction: ($event, entity) => this.config.toggleEntityDetails($event, entity)
+      }
+    );
     return actions;
   }
 
@@ -343,13 +353,13 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
             this.ruleChainService.setEdgeRootRuleChain(this.config.componentsData.edgeId, ruleChain.id.id).subscribe(
               (edge) => {
                 this.config.componentsData.edge = edge;
-                this.config.table.updateData();
+                this.config.updateData();
               }
             );
           } else {
             this.ruleChainService.setRootRuleChain(ruleChain.id.id).subscribe(
               () => {
-                this.config.table.updateData();
+                this.config.updateData();
               }
             );
           }
@@ -399,7 +409,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.ruleChainService.setEdgeTemplateRootRuleChain(ruleChain.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData();
             }
           );
         }
@@ -407,7 +417,32 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
     );
   }
 
-  addRuleChainsToEdge($event: Event) {
+  private checkMissingToRelatedRuleChains() {
+    this.edgeService.findMissingToRelatedRuleChains(this.config.componentsData.edgeId).subscribe(
+      (missingRuleChains) => {
+        if (missingRuleChains && Object.keys(missingRuleChains).length > 0) {
+          const formattedMissingRuleChains: Array<string> = new Array<string>();
+          for (const missingRuleChain of Object.keys(missingRuleChains)) {
+            const arrayOfMissingRuleChains = missingRuleChains[missingRuleChain];
+            const tmp = '- \'' + missingRuleChain + '\': \'' + arrayOfMissingRuleChains.join('\', ') + '\'';
+            formattedMissingRuleChains.push(tmp);
+          }
+          const message = this.translate.instant('edge.missing-related-rule-chains-text',
+            {missingRuleChains: formattedMissingRuleChains.join('<br>')});
+          this.dialogService.alert(this.translate.instant('edge.missing-related-rule-chains-title'),
+            message, this.translate.instant('action.close'), true).subscribe(
+            () => {
+              this.config.updateData();
+            }
+          );
+        } else {
+          this.config.updateData();
+        }
+      }
+    );
+  }
+
+  assignRuleChainsToEdge($event: Event) {
     if ($event) {
       $event.stopPropagation();
     }
@@ -422,28 +457,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
     }).afterClosed()
       .subscribe((res) => {
           if (res) {
-            this.edgeService.findMissingToRelatedRuleChains(this.config.componentsData.edgeId).subscribe(
-              (missingRuleChains) => {
-                if (missingRuleChains && Object.keys(missingRuleChains).length > 0) {
-                  const formattedMissingRuleChains: Array<string> = new Array<string>();
-                  for (const missingRuleChain of Object.keys(missingRuleChains)) {
-                    const arrayOfMissingRuleChains = missingRuleChains[missingRuleChain];
-                    const tmp = '- \'' + missingRuleChain + '\': \'' + arrayOfMissingRuleChains.join('\', ') + '\'';
-                    formattedMissingRuleChains.push(tmp);
-                  }
-                  const message = this.translate.instant('edge.missing-related-rule-chains-text',
-                    {missingRuleChains: formattedMissingRuleChains.join('<br>')});
-                  this.dialogService.alert(this.translate.instant('edge.missing-related-rule-chains-title'),
-                    message, this.translate.instant('action.close'), true).subscribe(
-                    () => {
-                      this.config.table.updateData();
-                    }
-                  );
-                } else {
-                  this.config.table.updateData();
-                }
-              }
-            );
+            this.checkMissingToRelatedRuleChains();
           }
         }
       );
@@ -463,7 +477,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.ruleChainService.unassignRuleChainFromEdge(this.config.componentsData.edgeId, ruleChain.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.checkMissingToRelatedRuleChains();
             }
           );
         }
@@ -491,7 +505,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
           );
           forkJoin(tasks).subscribe(
             () => {
-              this.config.table.updateData();
+              this.checkMissingToRelatedRuleChains();
             }
           );
         }
@@ -513,7 +527,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.ruleChainService.setAutoAssignToEdgeRuleChain(ruleChain.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData();
             }
           );
         }
@@ -535,7 +549,7 @@ export class RuleChainsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.ruleChainService.unsetAutoAssignToEdgeRuleChain(ruleChain.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData();
             }
           );
         }

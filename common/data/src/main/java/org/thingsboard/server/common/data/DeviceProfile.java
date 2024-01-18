@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,18 +36,16 @@ import javax.validation.Valid;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 
-import static org.thingsboard.server.common.data.SearchTextBasedWithAdditionalInfo.mapper;
-
 @ApiModel
 @Data
 @ToString(exclude = {"image", "profileDataBytes"})
 @EqualsAndHashCode(callSuper = true)
 @Slf4j
-public class DeviceProfile extends SearchTextBased<DeviceProfileId> implements HasName, HasTenantId, HasOtaPackage {
+public class DeviceProfile extends BaseData<DeviceProfileId> implements HasName, HasTenantId, HasOtaPackage, HasRuleEngineProfile, ExportableEntity<DeviceProfileId>, HasImage {
 
     private static final long serialVersionUID = 6998485460273302018L;
 
-    @ApiModelProperty(position = 3, value = "JSON object with Tenant Id that owns the profile.", readOnly = true)
+    @ApiModelProperty(position = 3, value = "JSON object with Tenant Id that owns the profile.", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     private TenantId tenantId;
     @NoXss
     @Length(fieldName = "name")
@@ -56,7 +54,6 @@ public class DeviceProfile extends SearchTextBased<DeviceProfileId> implements H
     @NoXss
     @ApiModelProperty(position = 11, value = "Device Profile description. ")
     private String description;
-    @Length(fieldName = "image", max = 1000000)
     @ApiModelProperty(position = 12, value = "Either URL or Base64 data of the icon. Used in the mobile application to visualize set of device profiles in the grid view. ")
     private String image;
     private boolean isDefault;
@@ -72,8 +69,9 @@ public class DeviceProfile extends SearchTextBased<DeviceProfileId> implements H
     private RuleChainId defaultRuleChainId;
     @ApiModelProperty(position = 6, value = "Reference to the dashboard. Used in the mobile application to open the default dashboard when user navigates to device details.")
     private DashboardId defaultDashboardId;
+
     @NoXss
-    @ApiModelProperty(position = 8, value = "Reference to the rule engine queue. " +
+    @ApiModelProperty(position = 8, value = "Rule engine queue name. " +
             "If present, the specified queue will be used to store all unprocessed messages related to device, including telemetry, attribute updates, etc. " +
             "Otherwise, the 'Main' queue will be used to store those messages.")
     private String defaultQueueName;
@@ -89,6 +87,13 @@ public class DeviceProfile extends SearchTextBased<DeviceProfileId> implements H
     private OtaPackageId firmwareId;
     @ApiModelProperty(position = 10, value = "Reference to the software OTA package. If present, the specified package will be used as default device software. ")
     private OtaPackageId softwareId;
+
+    @ApiModelProperty(position = 17, value = "Reference to the edge rule chain. " +
+            "If present, the specified edge rule chain will be used on the edge to process all messages related to device, including telemetry, attribute updates, etc. " +
+            "Otherwise, the edge root rule chain will be used to process those messages.")
+    private RuleChainId defaultEdgeRuleChainId;
+
+    private DeviceProfileId externalId;
 
     public DeviceProfile() {
         super();
@@ -112,6 +117,8 @@ public class DeviceProfile extends SearchTextBased<DeviceProfileId> implements H
         this.provisionDeviceKey = deviceProfile.getProvisionDeviceKey();
         this.firmwareId = deviceProfile.getFirmwareId();
         this.softwareId = deviceProfile.getSoftwareId();
+        this.defaultEdgeRuleChainId = deviceProfile.getDefaultEdgeRuleChainId();
+        this.externalId = deviceProfile.getExternalId();
     }
 
     @ApiModelProperty(position = 1, value = "JSON object with the device profile Id. " +
@@ -123,19 +130,14 @@ public class DeviceProfile extends SearchTextBased<DeviceProfileId> implements H
         return super.getId();
     }
 
-    @ApiModelProperty(position = 2, value = "Timestamp of the profile creation, in milliseconds", example = "1609459200000", readOnly = true)
+    @ApiModelProperty(position = 2, value = "Timestamp of the profile creation, in milliseconds", example = "1609459200000", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     @Override
     public long getCreatedTime() {
         return super.getCreatedTime();
     }
 
-    @Override
-    public String getSearchText() {
-        return getName();
-    }
-
     @ApiModelProperty(position = 5, value = "Used to mark the default profile. Default profile is used when the device profile is not specified during device creation.")
-    public boolean isDefault(){
+    public boolean isDefault() {
         return isDefault;
     }
 

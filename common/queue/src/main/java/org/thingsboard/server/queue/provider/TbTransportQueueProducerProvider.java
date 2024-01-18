@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package org.thingsboard.server.queue.provider;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
+import org.thingsboard.server.gen.transport.TransportProtos;
 import org.thingsboard.server.gen.transport.TransportProtos.ToCoreMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.ToCoreNotificationMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.ToRuleEngineMsg;
@@ -35,6 +36,7 @@ public class TbTransportQueueProducerProvider implements TbQueueProducerProvider
     private final TbTransportQueueFactory tbQueueProvider;
     private TbQueueProducer<TbProtoQueueMsg<ToRuleEngineMsg>> toRuleEngine;
     private TbQueueProducer<TbProtoQueueMsg<ToCoreMsg>> toTbCore;
+    private TbQueueProducer<TbProtoQueueMsg<ToCoreNotificationMsg>> toTbCoreNotifications;
     private TbQueueProducer<TbProtoQueueMsg<ToUsageStatsServiceMsg>> toUsageStats;
 
     public TbTransportQueueProducerProvider(TbTransportQueueFactory tbQueueProvider) {
@@ -46,6 +48,7 @@ public class TbTransportQueueProducerProvider implements TbQueueProducerProvider
         this.toTbCore = tbQueueProvider.createTbCoreMsgProducer();
         this.toRuleEngine = tbQueueProvider.createRuleEngineMsgProducer();
         this.toUsageStats = tbQueueProvider.createToUsageStatsServiceMsgProducer();
+        this.toTbCoreNotifications = tbQueueProvider.createTbCoreNotificationsMsgProducer();
     }
 
     @Override
@@ -70,6 +73,11 @@ public class TbTransportQueueProducerProvider implements TbQueueProducerProvider
 
     @Override
     public TbQueueProducer<TbProtoQueueMsg<ToCoreNotificationMsg>> getTbCoreNotificationsMsgProducer() {
+        return toTbCoreNotifications;
+    }
+
+    @Override
+    public TbQueueProducer<TbProtoQueueMsg<TransportProtos.ToVersionControlServiceMsg>> getTbVersionControlMsgProducer() {
         throw new RuntimeException("Not Implemented! Should not be used by Transport!");
     }
 

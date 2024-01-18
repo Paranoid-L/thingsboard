@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 ///
 
 import { Component, ElementRef, EventEmitter, forwardRef, Input, OnInit, Output, ViewChild } from '@angular/core';
-import { ControlValueAccessor, FormBuilder, FormGroup, NG_VALUE_ACCESSOR } from '@angular/forms';
+import { ControlValueAccessor, UntypedFormBuilder, UntypedFormGroup, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { Observable, of } from 'rxjs';
 import { PageLink } from '@shared/models/page/page-link';
 import { Direction } from '@shared/models/page/sort-order';
@@ -33,12 +33,13 @@ import { ENTER } from '@angular/cdk/keycodes';
 import { TenantProfile } from '@shared/models/tenant.model';
 import { MatDialog } from '@angular/material/dialog';
 import { TenantProfileDialogComponent, TenantProfileDialogData } from './tenant-profile-dialog.component';
-import { emptyPageData } from "@shared/models/page/page-data";
+import { emptyPageData } from '@shared/models/page/page-data';
+import { getEntityDetailsPageURL } from '@core/utils';
 
 @Component({
   selector: 'tb-tenant-profile-autocomplete',
   templateUrl: './tenant-profile-autocomplete.component.html',
-  styleUrls: [],
+  styleUrls: ['./tenant-profile-autocomplete.component.scss'],
   providers: [{
     provide: NG_VALUE_ACCESSOR,
     useExisting: forwardRef(() => TenantProfileAutocompleteComponent),
@@ -47,7 +48,7 @@ import { emptyPageData } from "@shared/models/page/page-data";
 })
 export class TenantProfileAutocompleteComponent implements ControlValueAccessor, OnInit {
 
-  selectTenantProfileFormGroup: FormGroup;
+  selectTenantProfileFormGroup: UntypedFormGroup;
 
   modelValue: TenantProfileId | null;
 
@@ -66,6 +67,9 @@ export class TenantProfileAutocompleteComponent implements ControlValueAccessor,
   @Input()
   disabled: boolean;
 
+  @Input()
+  showDetailsPageLink = false;
+
   @Output()
   tenantProfileUpdated = new EventEmitter<TenantProfileId>();
 
@@ -74,6 +78,7 @@ export class TenantProfileAutocompleteComponent implements ControlValueAccessor,
   filteredTenantProfiles: Observable<Array<EntityInfoData>>;
 
   searchText = '';
+  tenantProfileURL: string;
 
   private dirty = false;
 
@@ -83,7 +88,7 @@ export class TenantProfileAutocompleteComponent implements ControlValueAccessor,
               public translate: TranslateService,
               public truncate: TruncatePipe,
               private tenantProfileService: TenantProfileService,
-              private fb: FormBuilder,
+              private fb: UntypedFormBuilder,
               private dialog: MatDialog) {
     this.selectTenantProfileFormGroup = this.fb.group({
       tenantProfile: [null]
@@ -133,6 +138,11 @@ export class TenantProfileAutocompleteComponent implements ControlValueAccessor,
 
   setDisabledState(isDisabled: boolean): void {
     this.disabled = isDisabled;
+    if (this.disabled) {
+      this.selectTenantProfileFormGroup.disable({emitEvent: false});
+    } else {
+      this.selectTenantProfileFormGroup.enable({emitEvent: false});
+    }
   }
 
   writeValue(value: TenantProfileId | null): void {
@@ -141,6 +151,7 @@ export class TenantProfileAutocompleteComponent implements ControlValueAccessor,
       this.tenantProfileService.getTenantProfileInfo(value.id).subscribe(
         (profile) => {
           this.modelValue = new TenantProfileId(profile.id.id);
+          this.tenantProfileURL = getEntityDetailsPageURL(this.modelValue.id, this.modelValue.entityType);
           this.selectTenantProfileFormGroup.get('tenantProfile').patchValue(profile, {emitEvent: false});
         }
       );

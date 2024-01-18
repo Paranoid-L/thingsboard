@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,10 +34,9 @@ import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.TransportPayloadType;
 import org.thingsboard.server.common.data.security.DeviceTokenCredentials;
 import org.thingsboard.server.common.msg.session.FeatureType;
-import org.thingsboard.server.common.msg.session.SessionMsgType;
 import org.thingsboard.server.common.transport.TransportServiceCallback;
-import org.thingsboard.server.common.transport.adaptor.AdaptorException;
-import org.thingsboard.server.common.transport.adaptor.JsonConverter;
+import org.thingsboard.server.common.adaptor.AdaptorException;
+import org.thingsboard.server.common.adaptor.JsonConverter;
 import org.thingsboard.server.common.transport.auth.ValidateDeviceCredentialsResponse;
 import org.thingsboard.server.gen.transport.TransportProtos;
 import org.thingsboard.server.transport.coap.callback.CoapDeviceAuthCallback;
@@ -48,14 +47,16 @@ import org.thingsboard.server.transport.coap.callback.ToServerRpcSyncSessionCall
 import org.thingsboard.server.transport.coap.client.CoapClientContext;
 import org.thingsboard.server.transport.coap.client.TbCoapClientState;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.eclipse.californium.elements.DtlsEndpointContext.KEY_SESSION_ID;
 
 @Slf4j
 public class CoapTransportResource extends AbstractCoapTransportResource {
@@ -65,18 +66,19 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
 
     private static final int FEATURE_TYPE_POSITION_CERTIFICATE_REQUEST = 3;
     private static final int REQUEST_ID_POSITION_CERTIFICATE_REQUEST = 4;
-    private static final String DTLS_SESSION_ID_KEY = "DTLS_SESSION_ID";
 
-    private final ConcurrentMap<String, TbCoapDtlsSessionInfo> dtlsSessionIdMap;
+    private final ConcurrentMap<InetSocketAddress, TbCoapDtlsSessionInfo> dtlsSessionsMap;
     private final long timeout;
+    private final long piggybackTimeout;
     private final CoapClientContext clients;
 
     public CoapTransportResource(CoapTransportContext ctx, CoapServerService coapServerService, String name) {
         super(ctx, name);
         this.setObservable(true); // enable observing
         this.addObserver(new CoapResourceObserver());
-        this.dtlsSessionIdMap = coapServerService.getDtlsSessionsMap();
+        this.dtlsSessionsMap = coapServerService.getDtlsSessionsMap();
         this.timeout = coapServerService.getTimeout();
+        this.piggybackTimeout = coapServerService.getPiggybackTimeout();
         this.clients = ctx.getClientContext();
         long sessionReportTimeout = ctx.getSessionReportTimeout();
         ctx.getScheduler().scheduleAtFixedRate(clients::reportActivity, new Random().nextInt((int) sessionReportTimeout), sessionReportTimeout, TimeUnit.MILLISECONDS);
@@ -92,7 +94,7 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
         if (relation == null || relation.isCanceled()) {
             return; // because request did not try to establish a relation
         }
-        if (CoAP.ResponseCode.isSuccess(response.getCode())) {
+        if (response.getCode().isSuccess()) {
             if (!relation.isEstablished()) {
                 relation.setEstablished();
                 addObserveRelation(relation);
@@ -118,7 +120,7 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
         } else if (exchange.getRequestOptions().hasObserve()) {
             processExchangeGetRequest(exchange, featureType.get());
         } else if (featureType.get() == FeatureType.ATTRIBUTES) {
-            processRequest(exchange, SessionMsgType.GET_ATTRIBUTES_REQUEST);
+            processRequest(exchange, CoapSessionMsgType.GET_ATTRIBUTES_REQUEST);
         } else {
             log.trace("Invalid feature type parameter");
             exchange.respond(CoAP.ResponseCode.BAD_REQUEST);
@@ -127,13 +129,13 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
 
     private void processExchangeGetRequest(CoapExchange exchange, FeatureType featureType) {
         boolean unsubscribe = exchange.getRequestOptions().getObserve() == 1;
-        SessionMsgType sessionMsgType;
+        CoapSessionMsgType coapSessionMsgType;
         if (featureType == FeatureType.RPC) {
-            sessionMsgType = unsubscribe ? SessionMsgType.UNSUBSCRIBE_RPC_COMMANDS_REQUEST : SessionMsgType.SUBSCRIBE_RPC_COMMANDS_REQUEST;
+            coapSessionMsgType = unsubscribe ? CoapSessionMsgType.UNSUBSCRIBE_RPC_COMMANDS_REQUEST : CoapSessionMsgType.SUBSCRIBE_RPC_COMMANDS_REQUEST;
         } else {
-            sessionMsgType = unsubscribe ? SessionMsgType.UNSUBSCRIBE_ATTRIBUTES_REQUEST : SessionMsgType.SUBSCRIBE_ATTRIBUTES_REQUEST;
+            coapSessionMsgType = unsubscribe ? CoapSessionMsgType.UNSUBSCRIBE_ATTRIBUTES_REQUEST : CoapSessionMsgType.SUBSCRIBE_ATTRIBUTES_REQUEST;
         }
-        processRequest(exchange, sessionMsgType);
+        processRequest(exchange, coapSessionMsgType);
     }
 
     @Override
@@ -145,21 +147,21 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
         } else {
             switch (featureType.get()) {
                 case ATTRIBUTES:
-                    processRequest(exchange, SessionMsgType.POST_ATTRIBUTES_REQUEST);
+                    processRequest(exchange, CoapSessionMsgType.POST_ATTRIBUTES_REQUEST);
                     break;
                 case TELEMETRY:
-                    processRequest(exchange, SessionMsgType.POST_TELEMETRY_REQUEST);
+                    processRequest(exchange, CoapSessionMsgType.POST_TELEMETRY_REQUEST);
                     break;
                 case RPC:
                     Optional<Integer> requestId = getRequestId(exchange.advanced().getRequest());
                     if (requestId.isPresent()) {
-                        processRequest(exchange, SessionMsgType.TO_DEVICE_RPC_RESPONSE);
+                        processRequest(exchange, CoapSessionMsgType.TO_DEVICE_RPC_RESPONSE);
                     } else {
-                        processRequest(exchange, SessionMsgType.TO_SERVER_RPC_REQUEST);
+                        processRequest(exchange, CoapSessionMsgType.TO_SERVER_RPC_REQUEST);
                     }
                     break;
                 case CLAIM:
-                    processRequest(exchange, SessionMsgType.CLAIM_REQUEST);
+                    processRequest(exchange, CoapSessionMsgType.CLAIM_REQUEST);
                     break;
                 case PROVISION:
                     processProvision(exchange);
@@ -169,7 +171,7 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
     }
 
     private void processProvision(CoapExchange exchange) {
-        exchange.accept();
+        deferAccept(exchange);
         try {
             UUID sessionId = UUID.randomUUID();
             log.trace("[{}] Processing provision publish msg [{}]!", sessionId, exchange.advanced().getRequest());
@@ -193,16 +195,16 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
         }
     }
 
-    private void processRequest(CoapExchange exchange, SessionMsgType type) {
+    private void processRequest(CoapExchange exchange, CoapSessionMsgType type) {
         log.trace("Processing {}", exchange.advanced().getRequest());
-        exchange.accept();
+        deferAccept(exchange);
         Exchange advanced = exchange.advanced();
         Request request = advanced.getRequest();
 
-        String dtlsSessionIdStr = request.getSourceContext().get(DTLS_SESSION_ID_KEY);
-        if (dtlsSessionIdMap != null && StringUtils.isNotEmpty(dtlsSessionIdStr)) {
-            TbCoapDtlsSessionInfo tbCoapDtlsSessionInfo = dtlsSessionIdMap
-                    .computeIfPresent(dtlsSessionIdStr, (dtlsSessionId, dtlsSessionInfo) -> {
+        var dtlsSessionId = request.getSourceContext().get(KEY_SESSION_ID);
+        if (dtlsSessionsMap != null && dtlsSessionId != null && !dtlsSessionId.isEmpty()) {
+            TbCoapDtlsSessionInfo tbCoapDtlsSessionInfo = dtlsSessionsMap
+                    .computeIfPresent(request.getSourceContext().getPeerAddress(), (dtlsSessionIdStr, dtlsSessionInfo) -> {
                         dtlsSessionInfo.setLastActivityTime(System.currentTimeMillis());
                         return dtlsSessionInfo;
                     });
@@ -216,7 +218,7 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
         }
     }
 
-    private void processAccessTokenRequest(CoapExchange exchange, SessionMsgType type, Request request) {
+    private void processAccessTokenRequest(CoapExchange exchange, CoapSessionMsgType type, Request request) {
         Optional<DeviceTokenCredentials> credentials = decodeCredentials(request);
         if (credentials.isEmpty()) {
             exchange.respond(CoAP.ResponseCode.UNAUTHORIZED);
@@ -226,7 +228,7 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
                 new CoapDeviceAuthCallback(exchange, (deviceCredentials, deviceProfile) -> processRequest(exchange, type, request, deviceCredentials, deviceProfile)));
     }
 
-    private void processRequest(CoapExchange exchange, SessionMsgType type, Request request, ValidateDeviceCredentialsResponse deviceCredentials, DeviceProfile deviceProfile) {
+    private void processRequest(CoapExchange exchange, CoapSessionMsgType type, Request request, ValidateDeviceCredentialsResponse deviceCredentials, DeviceProfile deviceProfile) {
         TbCoapClientState clientState = null;
         try {
             clientState = clients.getOrCreateClient(type, deviceCredentials, deviceProfile);
@@ -346,6 +348,20 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
                 new CoapNoOpCallback(exchange));
     }
 
+    /**
+     * Send an empty ACK if we are unable to send the full response within the timeout.
+     * If the full response is transmitted before the timeout this will not do anything.
+     * If this is triggered the full response will be sent in a separate CON/NON message.
+     * Essentially this allows the use of piggybacked responses.
+     */
+    private void deferAccept(CoapExchange exchange) {
+        if (piggybackTimeout > 0) {
+            transportContext.getScheduler().schedule(exchange::accept, piggybackTimeout, TimeUnit.MILLISECONDS);
+        } else {
+            exchange.accept();
+        }
+    }
+
     private UUID toSessionId(TransportProtos.SessionInfoProto sessionInfoProto) {
         return new UUID(sessionInfoProto.getSessionIdMSB(), sessionInfoProto.getSessionIdLSB());
     }
@@ -364,12 +380,16 @@ public class CoapTransportResource extends AbstractCoapTransportResource {
         }
     }
 
-    private Optional<FeatureType> getFeatureType(Request request) {
+    protected Optional<FeatureType> getFeatureType(Request request) {
         List<String> uriPath = request.getOptions().getUriPath();
         try {
-            if (uriPath.size() >= FEATURE_TYPE_POSITION) {
+            int size = uriPath.size();
+            if (size >= FEATURE_TYPE_POSITION) {
+                if (size == FEATURE_TYPE_POSITION && StringUtils.isNumeric(uriPath.get(size - 1))) {
+                    return Optional.of(FeatureType.valueOf(uriPath.get(FEATURE_TYPE_POSITION - 2).toUpperCase()));
+                }
                 return Optional.of(FeatureType.valueOf(uriPath.get(FEATURE_TYPE_POSITION - 1).toUpperCase()));
-            } else if (uriPath.size() >= FEATURE_TYPE_POSITION_CERTIFICATE_REQUEST) {
+            } else if (size == FEATURE_TYPE_POSITION_CERTIFICATE_REQUEST) {
                 if (uriPath.contains(DataConstants.PROVISION)) {
                     return Optional.of(FeatureType.valueOf(DataConstants.PROVISION.toUpperCase()));
                 }

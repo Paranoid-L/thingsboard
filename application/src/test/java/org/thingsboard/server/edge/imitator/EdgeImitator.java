@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.thingsboard.edge.rpc.EdgeGrpcClient;
 import org.thingsboard.edge.rpc.EdgeRpcClient;
 import org.thingsboard.server.gen.edge.v1.AdminSettingsUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.AlarmCommentUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.AlarmUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.AssetProfileUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.AssetUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.CustomerUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.DashboardUpdateMsg;
@@ -41,9 +43,14 @@ import org.thingsboard.server.gen.edge.v1.DownlinkResponseMsg;
 import org.thingsboard.server.gen.edge.v1.EdgeConfiguration;
 import org.thingsboard.server.gen.edge.v1.EntityDataProto;
 import org.thingsboard.server.gen.edge.v1.EntityViewUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.OtaPackageUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.QueueUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.RelationUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.ResourceUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.RuleChainMetadataUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.RuleChainUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.TenantProfileUpdateMsg;
+import org.thingsboard.server.gen.edge.v1.TenantUpdateMsg;
 import org.thingsboard.server.gen.edge.v1.UplinkMsg;
 import org.thingsboard.server.gen.edge.v1.UplinkResponseMsg;
 import org.thingsboard.server.gen.edge.v1.UserCredentialsUpdateMsg;
@@ -88,7 +95,8 @@ public class EdgeImitator {
     @Getter
     private List<AbstractMessage> downlinkMsgs;
 
-    private boolean connected = false;
+    @Getter
+    private UplinkResponseMsg latestResponseMsg;
 
     public EdgeImitator(String host, int port, String routingKey, String routingSecret) throws NoSuchFieldException, IllegalAccessException {
         edgeRpcClient = new EdgeGrpcClient();
@@ -98,12 +106,15 @@ public class EdgeImitator {
         ignoredTypes = new ArrayList<>();
         this.routingKey = routingKey;
         this.routingSecret = routingSecret;
-        setEdgeCredentials("rpcHost", host);
-        setEdgeCredentials("rpcPort", port);
-        setEdgeCredentials("keepAliveTimeSec", 300);
+        updateEdgeClientFields("rpcHost", host);
+        updateEdgeClientFields("rpcPort", port);
+        updateEdgeClientFields("timeoutSecs", 3);
+        updateEdgeClientFields("keepAliveTimeSec", 300);
+        updateEdgeClientFields("keepAliveTimeoutSec", 5);
+        updateEdgeClientFields("maxInboundMessageSize", 4194304);
     }
 
-    private void setEdgeCredentials(String fieldName, Object value) throws NoSuchFieldException, IllegalAccessException {
+    private void updateEdgeClientFields(String fieldName, Object value) throws NoSuchFieldException, IllegalAccessException {
         Field fieldToSet = edgeRpcClient.getClass().getDeclaredField(fieldName);
         fieldToSet.setAccessible(true);
         fieldToSet.set(edgeRpcClient, value);
@@ -111,7 +122,6 @@ public class EdgeImitator {
     }
 
     public void connect() {
-        connected = true;
         edgeRpcClient.connect(routingKey, routingSecret,
                 this::onUplinkResponse,
                 this::onEdgeUpdate,
@@ -122,7 +132,6 @@ public class EdgeImitator {
     }
 
     public void disconnect() throws InterruptedException {
-        connected = false;
         edgeRpcClient.disconnect(false);
     }
 
@@ -132,6 +141,7 @@ public class EdgeImitator {
 
     private void onUplinkResponse(UplinkResponseMsg msg) {
         log.info("onUplinkResponse: {}", msg);
+        latestResponseMsg = msg;
         responsesLatch.countDown();
     }
 
@@ -144,22 +154,18 @@ public class EdgeImitator {
         Futures.addCallback(future, new FutureCallback<>() {
             @Override
             public void onSuccess(@Nullable List<Void> result) {
-                if (connected) {
-                    DownlinkResponseMsg downlinkResponseMsg = DownlinkResponseMsg.newBuilder()
-                            .setDownlinkMsgId(downlinkMsg.getDownlinkMsgId())
-                            .setSuccess(true).build();
-                    edgeRpcClient.sendDownlinkResponseMsg(downlinkResponseMsg);
-                }
+                DownlinkResponseMsg downlinkResponseMsg = DownlinkResponseMsg.newBuilder()
+                        .setDownlinkMsgId(downlinkMsg.getDownlinkMsgId())
+                        .setSuccess(true).build();
+                edgeRpcClient.sendDownlinkResponseMsg(downlinkResponseMsg);
             }
 
             @Override
             public void onFailure(Throwable t) {
-                if (connected) {
-                    DownlinkResponseMsg downlinkResponseMsg = DownlinkResponseMsg.newBuilder()
-                            .setDownlinkMsgId(downlinkMsg.getDownlinkMsgId())
-                            .setSuccess(false).setErrorMsg(t.getMessage()).build();
-                    edgeRpcClient.sendDownlinkResponseMsg(downlinkResponseMsg);
-                }
+                DownlinkResponseMsg downlinkResponseMsg = DownlinkResponseMsg.newBuilder()
+                        .setDownlinkMsgId(downlinkMsg.getDownlinkMsgId())
+                        .setSuccess(false).setErrorMsg(t.getMessage()).build();
+                edgeRpcClient.sendDownlinkResponseMsg(downlinkResponseMsg);
             }
         }, MoreExecutors.directExecutor());
     }
@@ -169,15 +175,11 @@ public class EdgeImitator {
     }
 
     private ListenableFuture<List<Void>> processDownlinkMsg(DownlinkMsg downlinkMsg) {
+        log.trace("processDownlinkMsg: {}", downlinkMsg);
         List<ListenableFuture<Void>> result = new ArrayList<>();
         if (downlinkMsg.getAdminSettingsUpdateMsgCount() > 0) {
             for (AdminSettingsUpdateMsg adminSettingsUpdateMsg : downlinkMsg.getAdminSettingsUpdateMsgList()) {
                 result.add(saveDownlinkMsg(adminSettingsUpdateMsg));
-            }
-        }
-        if (downlinkMsg.getDeviceUpdateMsgCount() > 0) {
-            for (DeviceUpdateMsg deviceUpdateMsg : downlinkMsg.getDeviceUpdateMsgList()) {
-                result.add(saveDownlinkMsg(deviceUpdateMsg));
             }
         }
         if (downlinkMsg.getDeviceProfileUpdateMsgCount() > 0) {
@@ -185,9 +187,19 @@ public class EdgeImitator {
                 result.add(saveDownlinkMsg(deviceProfileUpdateMsg));
             }
         }
+        if (downlinkMsg.getDeviceUpdateMsgCount() > 0) {
+            for (DeviceUpdateMsg deviceUpdateMsg : downlinkMsg.getDeviceUpdateMsgList()) {
+                result.add(saveDownlinkMsg(deviceUpdateMsg));
+            }
+        }
         if (downlinkMsg.getDeviceCredentialsUpdateMsgCount() > 0) {
             for (DeviceCredentialsUpdateMsg deviceCredentialsUpdateMsg : downlinkMsg.getDeviceCredentialsUpdateMsgList()) {
                 result.add(saveDownlinkMsg(deviceCredentialsUpdateMsg));
+            }
+        }
+        if (downlinkMsg.getAssetProfileUpdateMsgCount() > 0) {
+            for (AssetProfileUpdateMsg assetProfileUpdateMsg : downlinkMsg.getAssetProfileUpdateMsgList()) {
+                result.add(saveDownlinkMsg(assetProfileUpdateMsg));
             }
         }
         if (downlinkMsg.getAssetUpdateMsgCount() > 0) {
@@ -218,6 +230,11 @@ public class EdgeImitator {
         if (downlinkMsg.getAlarmUpdateMsgCount() > 0) {
             for (AlarmUpdateMsg alarmUpdateMsg : downlinkMsg.getAlarmUpdateMsgList()) {
                 result.add(saveDownlinkMsg(alarmUpdateMsg));
+            }
+        }
+        if (downlinkMsg.getAlarmCommentUpdateMsgCount() > 0) {
+            for (AlarmCommentUpdateMsg alarmCommentUpdateMsg : downlinkMsg.getAlarmCommentUpdateMsgList()) {
+                result.add(saveDownlinkMsg(alarmCommentUpdateMsg));
             }
         }
         if (downlinkMsg.getEntityDataCount() > 0) {
@@ -273,6 +290,38 @@ public class EdgeImitator {
                 result.add(saveDownlinkMsg(deviceCredentialsRequestMsg));
             }
         }
+        if (downlinkMsg.getOtaPackageUpdateMsgCount() > 0) {
+            for (OtaPackageUpdateMsg otaPackageUpdateMsg : downlinkMsg.getOtaPackageUpdateMsgList()) {
+                result.add(saveDownlinkMsg(otaPackageUpdateMsg));
+            }
+        }
+        if (downlinkMsg.getQueueUpdateMsgCount() > 0) {
+            for (QueueUpdateMsg queueUpdateMsg : downlinkMsg.getQueueUpdateMsgList()) {
+                result.add(saveDownlinkMsg(queueUpdateMsg));
+            }
+        }
+        if (downlinkMsg.getTenantUpdateMsgCount() > 0) {
+            for (TenantUpdateMsg tenantUpdateMsg : downlinkMsg.getTenantUpdateMsgList()) {
+                result.add(saveDownlinkMsg(tenantUpdateMsg));
+            }
+        }
+        if (downlinkMsg.getTenantProfileUpdateMsgCount() > 0) {
+            for (TenantProfileUpdateMsg tenantProfileUpdateMsg : downlinkMsg.getTenantProfileUpdateMsgList()) {
+                result.add(saveDownlinkMsg(tenantProfileUpdateMsg));
+            }
+        }
+        if (downlinkMsg.getResourceUpdateMsgCount() > 0) {
+            for (ResourceUpdateMsg resourceUpdateMsg : downlinkMsg.getResourceUpdateMsgList()) {
+                result.add(saveDownlinkMsg(resourceUpdateMsg));
+            }
+        }
+        if (downlinkMsg.hasEdgeConfiguration()) {
+            result.add(saveDownlinkMsg(downlinkMsg.getEdgeConfiguration()));
+        }
+        if (downlinkMsg.hasSyncCompletedMsg()) {
+            result.add(saveDownlinkMsg(downlinkMsg.getSyncCompletedMsg()));
+        }
+
         return Futures.allAsList(result);
     }
 
@@ -342,11 +391,7 @@ public class EdgeImitator {
     }
 
     public AbstractMessage getLatestMessage() {
-        return getMessageFromTail(1);
-    }
-
-    public AbstractMessage getMessageFromTail(int offset) {
-        return downlinkMsgs.get(downlinkMsgs.size() - offset);
+        return downlinkMsgs.get(downlinkMsgs.size() - 1);
     }
 
     public void ignoreType(Class<? extends AbstractMessage> type) {

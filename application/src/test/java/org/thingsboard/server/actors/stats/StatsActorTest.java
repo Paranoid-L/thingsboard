@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.thingsboard.server.actors.stats;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.thingsboard.server.actors.ActorSystemContext;
-import org.thingsboard.server.common.data.Event;
+import org.thingsboard.server.common.data.event.Event;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.dao.event.EventService;
 import org.thingsboard.server.queue.discovery.TbServiceInfoProvider;
@@ -59,11 +59,11 @@ class StatsActorTest {
     @Test
     void givenNonEmptyStatMessage_whenOnStatsPersistMsg_thenNoAction() {
         statsActor.onStatsPersistMsg(new StatsPersistMsg(0, 1, TenantId.SYS_TENANT_ID, TenantId.SYS_TENANT_ID));
-        verify(eventService, times(1)).save(any(Event.class));
+        verify(eventService, times(1)).saveAsync(any(Event.class));
         statsActor.onStatsPersistMsg(new StatsPersistMsg(1, 0, TenantId.SYS_TENANT_ID, TenantId.SYS_TENANT_ID));
-        verify(eventService, times(2)).save(any(Event.class));
+        verify(eventService, times(2)).saveAsync(any(Event.class));
         statsActor.onStatsPersistMsg(new StatsPersistMsg(1, 1, TenantId.SYS_TENANT_ID, TenantId.SYS_TENANT_ID));
-        verify(eventService, times(3)).save(any(Event.class));
+        verify(eventService, times(3)).saveAsync(any(Event.class));
     }
 
 }

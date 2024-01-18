@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,15 +22,13 @@ import org.hibernate.annotations.Type;
 import org.hibernate.annotations.TypeDef;
 import org.thingsboard.common.util.JacksonUtil;
 import org.thingsboard.server.common.data.OtaPackageInfo;
-import org.thingsboard.server.common.data.StringUtils;
-import org.thingsboard.server.common.data.ota.ChecksumAlgorithm;
-import org.thingsboard.server.common.data.ota.OtaPackageType;
 import org.thingsboard.server.common.data.id.DeviceProfileId;
 import org.thingsboard.server.common.data.id.OtaPackageId;
 import org.thingsboard.server.common.data.id.TenantId;
+import org.thingsboard.server.common.data.ota.ChecksumAlgorithm;
+import org.thingsboard.server.common.data.ota.OtaPackageType;
 import org.thingsboard.server.dao.model.BaseSqlEntity;
 import org.thingsboard.server.dao.model.ModelConstants;
-import org.thingsboard.server.dao.model.SearchTextEntity;
 import org.thingsboard.server.dao.util.mapping.JsonStringType;
 
 import javax.persistence.Column;
@@ -61,7 +59,7 @@ import static org.thingsboard.server.dao.model.ModelConstants.SEARCH_TEXT_PROPER
 @Entity
 @TypeDef(name = "json", typeClass = JsonStringType.class)
 @Table(name = OTA_PACKAGE_TABLE_NAME)
-public class OtaPackageInfoEntity extends BaseSqlEntity<OtaPackageInfo> implements SearchTextEntity<OtaPackageInfo> {
+public class OtaPackageInfoEntity extends BaseSqlEntity<OtaPackageInfo> {
 
     @Column(name = OTA_PACKAGE_TENANT_ID_COLUMN)
     private UUID tenantId;
@@ -104,9 +102,6 @@ public class OtaPackageInfoEntity extends BaseSqlEntity<OtaPackageInfo> implemen
     @Type(type = "json")
     @Column(name = ModelConstants.OTA_PACKAGE_ADDITIONAL_INFO_COLUMN)
     private JsonNode additionalInfo;
-
-    @Column(name = SEARCH_TEXT_PROPERTY)
-    private String searchText;
 
     @Transient
     private boolean hasData;
@@ -157,20 +152,10 @@ public class OtaPackageInfoEntity extends BaseSqlEntity<OtaPackageInfo> implemen
     }
 
     @Override
-    public String getSearchTextSource() {
-        return title;
-    }
-
-    @Override
-    public void setSearchText(String searchText) {
-        this.searchText = searchText;
-    }
-
-    @Override
     public OtaPackageInfo toData() {
         OtaPackageInfo otaPackageInfo = new OtaPackageInfo(new OtaPackageId(id));
         otaPackageInfo.setCreatedTime(createdTime);
-        otaPackageInfo.setTenantId(new TenantId(tenantId));
+        otaPackageInfo.setTenantId(TenantId.fromUUID(tenantId));
         if (deviceProfileId != null) {
             otaPackageInfo.setDeviceProfileId(new DeviceProfileId(deviceProfileId));
         }

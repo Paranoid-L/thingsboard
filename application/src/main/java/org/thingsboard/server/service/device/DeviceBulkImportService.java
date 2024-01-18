@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,6 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.thingsboard.common.util.JacksonUtil;
 import org.thingsboard.server.common.data.Device;
@@ -31,27 +29,37 @@ import org.thingsboard.server.common.data.DeviceProfileProvisionType;
 import org.thingsboard.server.common.data.DeviceProfileType;
 import org.thingsboard.server.common.data.DeviceTransportType;
 import org.thingsboard.server.common.data.EntityType;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.device.credentials.BasicMqttCredentials;
-import org.thingsboard.server.common.data.device.credentials.lwm2m.LwM2MClientCredentials;
+import org.thingsboard.server.common.data.device.credentials.lwm2m.LwM2MClientCredential;
 import org.thingsboard.server.common.data.device.credentials.lwm2m.LwM2MSecurityMode;
+import org.thingsboard.server.common.data.device.data.DefaultDeviceConfiguration;
+import org.thingsboard.server.common.data.device.data.DeviceData;
+import org.thingsboard.server.common.data.device.data.PowerMode;
+import org.thingsboard.server.common.data.device.data.SnmpDeviceTransportConfiguration;
 import org.thingsboard.server.common.data.device.profile.DefaultDeviceProfileConfiguration;
 import org.thingsboard.server.common.data.device.profile.DeviceProfileData;
-import org.thingsboard.server.common.data.device.profile.DeviceProfileTransportConfiguration;
 import org.thingsboard.server.common.data.device.profile.DisabledDeviceProfileProvisionConfiguration;
 import org.thingsboard.server.common.data.device.profile.Lwm2mDeviceProfileTransportConfiguration;
+import org.thingsboard.server.common.data.device.profile.lwm2m.OtherConfiguration;
+import org.thingsboard.server.common.data.device.profile.lwm2m.TelemetryMappingConfiguration;
+import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.security.DeviceCredentials;
 import org.thingsboard.server.common.data.security.DeviceCredentialsType;
+import org.thingsboard.server.common.data.sync.ie.importing.csv.BulkImportColumnType;
+import org.thingsboard.server.common.data.transport.snmp.SnmpProtocolVersion;
 import org.thingsboard.server.dao.device.DeviceCredentialsService;
 import org.thingsboard.server.dao.device.DeviceProfileService;
 import org.thingsboard.server.dao.device.DeviceService;
 import org.thingsboard.server.dao.exception.DeviceCredentialsValidationException;
 import org.thingsboard.server.queue.util.TbCoreComponent;
-import org.thingsboard.server.service.importing.AbstractBulkImportService;
-import org.thingsboard.server.service.importing.BulkImportColumnType;
+import org.thingsboard.server.service.entitiy.device.TbDeviceService;
 import org.thingsboard.server.service.security.model.SecurityUser;
+import org.thingsboard.server.service.sync.ie.importing.csv.AbstractBulkImportService;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
@@ -65,24 +73,25 @@ import java.util.concurrent.locks.ReentrantLock;
 @RequiredArgsConstructor
 public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
     protected final DeviceService deviceService;
+    protected final TbDeviceService tbDeviceService;
     protected final DeviceCredentialsService deviceCredentialsService;
     protected final DeviceProfileService deviceProfileService;
 
     private final Lock findOrCreateDeviceProfileLock = new ReentrantLock();
 
     @Override
-    protected void setEntityFields(Device entity, Map<BulkImportColumnType, String> fields) {
-        ObjectNode additionalInfo = (ObjectNode) Optional.ofNullable(entity.getAdditionalInfo()).orElseGet(JacksonUtil::newObjectNode);
+    protected void setEntityFields(Device device, Map<BulkImportColumnType, String> fields) {
+        ObjectNode additionalInfo = getOrCreateAdditionalInfoObj(device);
         fields.forEach((columnType, value) -> {
             switch (columnType) {
                 case NAME:
-                    entity.setName(value);
+                    device.setName(value);
                     break;
                 case TYPE:
-                    entity.setType(value);
+                    device.setType(value);
                     break;
                 case LABEL:
-                    entity.setLabel(value);
+                    device.setLabel(value);
                     break;
                 case DESCRIPTION:
                     additionalInfo.set("description", new TextNode(value));
@@ -91,15 +100,17 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
                     additionalInfo.set("gateway", BooleanNode.valueOf(Boolean.parseBoolean(value)));
                     break;
             }
-            entity.setAdditionalInfo(additionalInfo);
+            device.setAdditionalInfo(additionalInfo);
         });
+        setUpDeviceConfiguration(device, fields);
     }
 
     @Override
-    protected Device saveEntity(Device entity, Map<BulkImportColumnType, String> fields) {
+    @SneakyThrows
+    protected Device saveEntity(SecurityUser user, Device device, Map<BulkImportColumnType, String> fields) {
         DeviceCredentials deviceCredentials;
         try {
-            deviceCredentials = createDeviceCredentials(fields);
+            deviceCredentials = createDeviceCredentials(device.getTenantId(), device.getId(), fields);
             deviceCredentialsService.formatCredentials(deviceCredentials);
         } catch (Exception e) {
             throw new DeviceCredentialsValidationException("Invalid device credentials: " + e.getMessage());
@@ -107,15 +118,15 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
 
         DeviceProfile deviceProfile;
         if (deviceCredentials.getCredentialsType() == DeviceCredentialsType.LWM2M_CREDENTIALS) {
-            deviceProfile = setUpLwM2mDeviceProfile(entity.getTenantId(), entity);
-        } else if (StringUtils.isNotEmpty(entity.getType())) {
-            deviceProfile = deviceProfileService.findOrCreateDeviceProfile(entity.getTenantId(), entity.getType());
+            deviceProfile = setUpLwM2mDeviceProfile(device.getTenantId(), device);
+        } else if (StringUtils.isNotEmpty(device.getType())) {
+            deviceProfile = deviceProfileService.findOrCreateDeviceProfile(device.getTenantId(), device.getType());
         } else {
-            deviceProfile = deviceProfileService.findDefaultDeviceProfile(entity.getTenantId());
+            deviceProfile = deviceProfileService.findDefaultDeviceProfile(device.getTenantId());
         }
-        entity.setDeviceProfileId(deviceProfile.getId());
+        device.setDeviceProfileId(deviceProfile.getId());
 
-        return deviceService.saveDeviceWithCredentials(entity, deviceCredentials);
+        return tbDeviceService.saveDeviceWithCredentials(device, deviceCredentials, user);
     }
 
     @Override
@@ -130,8 +141,24 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
         entity.setCustomerId(user.getCustomerId());
     }
 
+    private void setUpDeviceConfiguration(Device device, Map<BulkImportColumnType, String> fields) {
+        if (fields.containsKey(BulkImportColumnType.SNMP_HOST)) {
+            SnmpDeviceTransportConfiguration transportConfiguration = new SnmpDeviceTransportConfiguration();
+            transportConfiguration.setHost(fields.get(BulkImportColumnType.SNMP_HOST));
+            transportConfiguration.setPort(Optional.ofNullable(fields.get(BulkImportColumnType.SNMP_PORT))
+                    .map(Integer::parseInt).orElse(161));
+            transportConfiguration.setProtocolVersion(Optional.ofNullable(fields.get(BulkImportColumnType.SNMP_VERSION))
+                    .map(version -> SnmpProtocolVersion.valueOf(version.toUpperCase())).orElse(SnmpProtocolVersion.V2C));
+            transportConfiguration.setCommunity(fields.getOrDefault(BulkImportColumnType.SNMP_COMMUNITY_STRING, "public"));
+
+            DeviceData deviceData = new DeviceData();
+            deviceData.setTransportConfiguration(transportConfiguration);
+            device.setDeviceData(deviceData);
+        }
+    }
+
     @SneakyThrows
-    private DeviceCredentials createDeviceCredentials(Map<BulkImportColumnType, String> fields) {
+    private DeviceCredentials createDeviceCredentials(TenantId tenantId, DeviceId deviceId, Map<BulkImportColumnType, String> fields) {
         DeviceCredentials credentials = new DeviceCredentials();
         if (fields.containsKey(BulkImportColumnType.LWM2M_CLIENT_ENDPOINT)) {
             credentials.setCredentialsType(DeviceCredentialsType.LWM2M_CREDENTIALS);
@@ -142,7 +169,9 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
         } else if (CollectionUtils.containsAny(fields.keySet(), EnumSet.of(BulkImportColumnType.MQTT_CLIENT_ID, BulkImportColumnType.MQTT_USER_NAME, BulkImportColumnType.MQTT_PASSWORD))) {
             credentials.setCredentialsType(DeviceCredentialsType.MQTT_BASIC);
             setUpBasicMqttCredentials(fields, credentials);
-        } else {
+        } else if (deviceId != null && !fields.containsKey(BulkImportColumnType.ACCESS_TOKEN)) {
+            credentials = deviceCredentialsService.findDeviceCredentialsByDeviceId(tenantId, deviceId);
+        } else  {
             credentials.setCredentialsType(DeviceCredentialsType.ACCESS_TOKEN);
             setUpAccessTokenCredentials(fields, credentials);
         }
@@ -151,7 +180,7 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
 
     private void setUpAccessTokenCredentials(Map<BulkImportColumnType, String> fields, DeviceCredentials credentials) {
         credentials.setCredentialsId(Optional.ofNullable(fields.get(BulkImportColumnType.ACCESS_TOKEN))
-                .orElseGet(() -> RandomStringUtils.randomAlphanumeric(20)));
+                .orElseGet(() -> StringUtils.randomAlphanumeric(20)));
     }
 
     private void setUpBasicMqttCredentials(Map<BulkImportColumnType, String> fields, DeviceCredentials credentials) {
@@ -170,7 +199,7 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
         ObjectNode lwm2mCredentials = JacksonUtil.newObjectNode();
 
         Set.of(BulkImportColumnType.LWM2M_CLIENT_SECURITY_CONFIG_MODE, BulkImportColumnType.LWM2M_BOOTSTRAP_SERVER_SECURITY_MODE,
-                BulkImportColumnType.LWM2M_SERVER_SECURITY_MODE).stream()
+                        BulkImportColumnType.LWM2M_SERVER_SECURITY_MODE).stream()
                 .map(fields::get)
                 .filter(Objects::nonNull)
                 .forEach(securityMode -> {
@@ -185,9 +214,9 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
         setValues(client, fields, Set.of(BulkImportColumnType.LWM2M_CLIENT_SECURITY_CONFIG_MODE,
                 BulkImportColumnType.LWM2M_CLIENT_ENDPOINT, BulkImportColumnType.LWM2M_CLIENT_IDENTITY,
                 BulkImportColumnType.LWM2M_CLIENT_KEY, BulkImportColumnType.LWM2M_CLIENT_CERT));
-        LwM2MClientCredentials lwM2MClientCredentials = JacksonUtil.treeToValue(client, LwM2MClientCredentials.class);
+        LwM2MClientCredential lwM2MClientCredential = JacksonUtil.treeToValue(client, LwM2MClientCredential.class);
         // so that only fields needed for specific type of lwM2MClientCredentials were saved in json
-        lwm2mCredentials.set("client", JacksonUtil.valueToTree(lwM2MClientCredentials));
+        lwm2mCredentials.set("client", JacksonUtil.valueToTree(lwM2MClientCredential));
 
         ObjectNode bootstrapServer = JacksonUtil.newObjectNode();
         setValues(bootstrapServer, fields, Set.of(BulkImportColumnType.LWM2M_BOOTSTRAP_SERVER_SECURITY_MODE,
@@ -225,11 +254,14 @@ public class DeviceBulkImportService extends AbstractBulkImportService<Device> {
                     deviceProfile.setTransportType(DeviceTransportType.LWM2M);
                     deviceProfile.setProvisionType(DeviceProfileProvisionType.DISABLED);
 
+                    Lwm2mDeviceProfileTransportConfiguration transportConfiguration = new Lwm2mDeviceProfileTransportConfiguration();
+                    transportConfiguration.setBootstrap(Collections.emptyList());
+                    transportConfiguration.setClientLwM2mSettings(new OtherConfiguration(1, 1, 1, PowerMode.DRX, null, null, null, null, null));
+                    transportConfiguration.setObserveAttr(new TelemetryMappingConfiguration(Collections.emptyMap(), Collections.emptySet(), Collections.emptySet(), Collections.emptySet(), Collections.emptyMap()));
+
                     DeviceProfileData deviceProfileData = new DeviceProfileData();
                     DefaultDeviceProfileConfiguration configuration = new DefaultDeviceProfileConfiguration();
-                    DeviceProfileTransportConfiguration transportConfiguration = new Lwm2mDeviceProfileTransportConfiguration();
                     DisabledDeviceProfileProvisionConfiguration provisionConfiguration = new DisabledDeviceProfileProvisionConfiguration(null);
-
                     deviceProfileData.setConfiguration(configuration);
                     deviceProfileData.setTransportConfiguration(transportConfiguration);
                     deviceProfileData.setProvisionConfiguration(provisionConfiguration);

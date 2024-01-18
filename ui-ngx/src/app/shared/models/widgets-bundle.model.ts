@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -14,14 +14,16 @@
 /// limitations under the License.
 ///
 
-import { BaseData } from '@shared/models/base-data';
+import { BaseData, ExportableEntity } from '@shared/models/base-data';
 import { TenantId } from '@shared/models/id/tenant-id';
 import { WidgetsBundleId } from '@shared/models/id/widgets-bundle-id';
+import { HasTenantId } from '@shared/models/entity.models';
 
-export interface WidgetsBundle extends BaseData<WidgetsBundleId> {
+export interface WidgetsBundle extends BaseData<WidgetsBundleId>, HasTenantId, ExportableEntity<WidgetsBundleId> {
   tenantId: TenantId;
   alias: string;
   title: string;
   image: string;
   description: string;
+  order: number;
 }

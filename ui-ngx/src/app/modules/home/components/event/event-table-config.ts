@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
 ///
 
 import {
+  CellActionDescriptorType,
   DateEntityTableColumn,
   EntityActionTableColumn,
   EntityTableColumn,
   EntityTableConfig
 } from '@home/models/entity/entities-table-config.models';
-import { DebugEventType, Event, EventType, FilterEventBody } from '@shared/models/event.models';
+import { DebugEventType, Event, EventBody, EventType, FilterEventBody } from '@shared/models/event.models';
 import { TimePageLink } from '@shared/models/page/page-link';
 import { TranslateService } from '@ngx-translate/core';
 import { DatePipe } from '@angular/common';
@@ -29,7 +30,7 @@ import { EntityId } from '@shared/models/id/entity-id';
 import { EventService } from '@app/core/http/event.service';
 import { EventTableHeaderComponent } from '@home/components/event/event-table-header.component';
 import { EntityTypeResource } from '@shared/models/entity-type.models';
-import { Observable } from 'rxjs';
+import { fromEvent, Observable } from 'rxjs';
 import { PageData } from '@shared/models/page/page-data';
 import { Direction } from '@shared/models/page/sort-order';
 import { DialogService } from '@core/services/dialog.service';
@@ -39,8 +40,9 @@ import {
   EventContentDialogData
 } from '@home/components/event/event-content-dialog.component';
 import { isEqual, sortObjectKeys } from '@core/utils';
+import { historyInterval, MINUTE } from '@shared/models/time/time.models';
 import { ConnectedPosition, Overlay, OverlayConfig, OverlayRef } from '@angular/cdk/overlay';
-import { ChangeDetectorRef, Injector, StaticProvider, ViewContainerRef } from '@angular/core';
+import { ChangeDetectorRef, EventEmitter, Injector, StaticProvider, ViewContainerRef } from '@angular/core';
 import { ComponentPortal } from '@angular/cdk/portal';
 import {
   EVENT_FILTER_PANEL_DATA,
@@ -48,10 +50,12 @@ import {
   EventFilterPanelData,
   FilterEntityColumn
 } from '@home/components/event/event-filter-panel.component';
+import { DEFAULT_OVERLAY_POSITIONS } from '@shared/models/overlay.models';
 
 export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
 
   eventTypeValue: EventType | DebugEventType;
+  hideClearEventAction = false;
 
   private filterParams: FilterEventBody = {};
   private filterColumns: FilterEntityColumn[] = [];
@@ -59,6 +63,7 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
   set eventType(eventType: EventType | DebugEventType) {
     if (this.eventTypeValue !== eventType) {
       this.eventTypeValue = eventType;
+      this.updateCellAction();
       this.updateColumns(true);
       this.updateFilterColumns();
     }
@@ -82,16 +87,20 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
               private debugEventTypes: Array<DebugEventType> = null,
               private overlay: Overlay,
               private viewContainerRef: ViewContainerRef,
-              private cd: ChangeDetectorRef) {
+              private cd: ChangeDetectorRef,
+              public testButtonLabel?: string,
+              private debugEventSelected?: EventEmitter<EventBody>) {
     super();
     this.loadDataOnInit = false;
     this.tableTitle = '';
     this.useTimePageLink = true;
+    this.defaultTimewindowInterval = historyInterval(MINUTE * 15);
     this.detailsPanelEnabled = false;
     this.selectionEnabled = false;
     this.searchEnabled = false;
     this.addEnabled = false;
     this.entitiesDeleteEnabled = false;
+    this.pageMode = false;
 
     this.headerComponent = EventTableHeaderComponent;
 
@@ -117,12 +126,12 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
     this.defaultSortOrder = {property: 'createdTime', direction: Direction.DESC};
 
     this.updateColumns();
+    this.updateCellAction();
     this.updateFilterColumns();
 
     this.headerActionDescriptors.push({
       name: this.translate.instant('event.clear-filter'),
       icon: 'mdi:filter-variant-remove',
-      isMdiIcon: true,
       isEnabled: () => !isEqual(this.filterParams, {}),
       onAction: ($event) => {
         this.clearFiter($event);
@@ -135,6 +144,34 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
       onAction: ($event) => {
         this.editEventFilter($event);
       }
+    },
+    {
+      name: this.translate.instant('event.clean-events'),
+      icon: 'delete',
+      isEnabled: () => !this.hideClearEventAction,
+      onAction: $event => this.clearEvents($event)
+    });
+  }
+
+  clearEvents($event) {
+    if ($event) {
+      $event.stopPropagation();
+    }
+    this.dialogService.confirm(
+      this.translate.instant('event.clear-request-title'),
+      this.translate.instant('event.clear-request-text'),
+      this.translate.instant('action.no'),
+      this.translate.instant('action.yes')
+    ).subscribe((res) => {
+      if (res) {
+        this.eventService.clearEvents(this.entityId, this.eventType, this.filterParams,
+          this.tenantId, this.getTable().pageLink as TimePageLink).subscribe(
+          () => {
+            this.getTable().paginator.pageIndex = 0;
+            this.updateData();
+          }
+        );
+      }
     });
   }
 
@@ -145,7 +182,7 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
   updateColumns(updateTableColumns: boolean = false): void {
     this.columns = [];
     this.columns.push(
-      new DateEntityTableColumn<Event>('createdTime', 'event.event-time', this.datePipe, '120px'),
+      new DateEntityTableColumn<Event>('createdTime', 'event.event-time', this.datePipe, '120px', 'yyyy-MM-dd HH:mm:ss.SSS'),
       new EntityTableColumn<Event>('server', 'event.server', '100px',
         (entity) => entity.body.server, entity => ({}), false));
     switch (this.eventType) {
@@ -195,8 +232,9 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
         );
         break;
       case DebugEventType.DEBUG_RULE_NODE:
-      case DebugEventType.DEBUG_RULE_CHAIN:
-        this.columns[0].width = '100px';
+        this.columns[0].width = '80px';
+        (this.columns[1] as EntityTableColumn<Event>).headerCellStyleFunction = () => ({padding: '0 12px 0 0'});
+        (this.columns[1] as EntityTableColumn<Event>).cellStyleFunction = () => ({padding: '0 12px 0 0'});
         this.columns.push(
           new EntityTableColumn<Event>('type', 'event.type', '40px',
             (entity) => entity.body.type, entity => ({
@@ -204,20 +242,49 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
             }), false, key => ({
               padding: '0 12px 0 0'
             })),
-          new EntityTableColumn<Event>('entityName', 'event.entity-type', '100px',
-            (entity) => entity.body.entityName, entity => ({
+          new EntityTableColumn<Event>('entityType', 'event.entity-type', '75px',
+            (entity) => entity.body.entityType, entity => ({
               padding: '0 12px 0 0',
             }), false, key => ({
               padding: '0 12px 0 0'
             })),
-          new EntityTableColumn<Event>('msgId', 'event.message-id', '100px',
-            (entity) => entity.body.msgId, entity => ({
-              whiteSpace: 'nowrap',
+          new EntityTableColumn<Event>('entityId', 'event.entity-id', '85px',
+            (entity) => `<span style="display: inline-block; width: 7ch">${entity.body.entityId.substring(0, 6)}…</span>`,
+            () => ({
               padding: '0 12px 0 0'
-            }), false, key => ({
+            }), false, () => ({
               padding: '0 12px 0 0'
             }),
-            entity => entity.body.msgId),
+            () => undefined, false, {
+              name: this.translate.instant('event.copy-entity-id'),
+              icon: 'content_paste',
+              style: {
+                padding: '4px',
+                'font-size': '16px',
+                color: 'rgba(0,0,0,.87)'
+              },
+              isEnabled: () => true,
+              onAction: ($event, entity) => entity.body.entityId,
+              type: CellActionDescriptorType.COPY_BUTTON
+            }),
+          new EntityTableColumn<Event>('msgId', 'event.message-id', '85px',
+            (entity) => `<span style="display: inline-block; width: 7ch">${entity.body.msgId.substring(0, 6)}…</span>`,
+            () => ({
+              padding: '0 12px 0 0'
+            }), false, () => ({
+              padding: '0 12px 0 0'
+            }), () => undefined, false, {
+              name: this.translate.instant('event.copy-message-id'),
+              icon: 'content_paste',
+              style: {
+                padding: '4px',
+                'font-size': '16px',
+                color: 'rgba(0,0,0,.87)'
+              },
+              isEnabled: () => true,
+              onAction: ($event, entity) => entity.body.msgId,
+              type: CellActionDescriptorType.COPY_BUTTON
+            }),
           new EntityTableColumn<Event>('msgType', 'event.message-type', '100px',
             (entity) => entity.body.msgType, entity => ({
               whiteSpace: 'nowrap',
@@ -226,8 +293,8 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
               padding: '0 12px 0 0'
             }),
             entity => entity.body.msgType),
-          new EntityTableColumn<Event>('relationType', 'event.relation-type', '100px',
-            (entity) => entity.body.relationType, entity => ({padding: '0 12px 0 0', }), false, key => ({
+          new EntityTableColumn<Event>('relationType', 'event.relation-type', '85px',
+            (entity) => entity.body.relationType, () => ({padding: '0 12px 0 0'}), false, () => ({
               padding: '0 12px 0 0'
             })),
           new EntityActionTableColumn<Event>('data', 'event.data',
@@ -238,7 +305,7 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
               onAction: ($event, entity) => this.showContent($event, entity.body.data,
                 'event.data', entity.body.dataType)
             },
-            '40px'),
+            '48px'),
           new EntityActionTableColumn<Event>('metadata', 'event.metadata',
             {
               name: this.translate.instant('action.view'),
@@ -247,7 +314,7 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
               onAction: ($event, entity) => this.showContent($event, entity.body.metadata,
                 'event.metadata', ContentType.JSON, true)
             },
-            '40px'),
+            '48px'),
           new EntityActionTableColumn<Event>('error', 'event.error',
             {
               name: this.translate.instant('action.view'),
@@ -256,13 +323,55 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
               onAction: ($event, entity) => this.showContent($event, entity.body.error,
                 'event.error')
             },
-            '40px')
+            '48px')
+        );
+        break;
+      case DebugEventType.DEBUG_RULE_CHAIN:
+        this.columns[0].width = '100px';
+        this.columns.push(
+          new EntityActionTableColumn<Event>('message', 'event.message',
+            {
+              name: this.translate.instant('action.view'),
+              icon: 'more_horiz',
+              isEnabled: (entity) => entity.body.message ? entity.body.message.length > 0 : false,
+              onAction: ($event, entity) => this.showContent($event, entity.body.message,
+                'event.message')
+            },
+            '48px'),
+          new EntityActionTableColumn<Event>('error', 'event.error',
+            {
+              name: this.translate.instant('action.view'),
+              icon: 'more_horiz',
+              isEnabled: (entity) => entity.body.error && entity.body.error.length > 0,
+              onAction: ($event, entity) => this.showContent($event, entity.body.error,
+                'event.error')
+            },
+            '48px')
         );
         break;
     }
     if (updateTableColumns) {
-      this.table.columnsUpdated(true);
+      this.getTable().columnsUpdated(true);
     }
+  }
+
+  updateCellAction() {
+    this.cellActionDescriptors = [];
+    switch (this.eventType) {
+      case DebugEventType.DEBUG_RULE_NODE:
+        if (this.testButtonLabel) {
+          this.cellActionDescriptors.push({
+            name: this.translate.instant('rulenode.test-with-this-message', {test: this.translate.instant(this.testButtonLabel)}),
+            icon: 'bug_report',
+            isEnabled: (entity) => entity.body.type === 'IN' || entity.body.error !== undefined,
+            onAction: ($event, entity) => {
+              this.debugEventSelected.next(entity.body);
+            }
+          });
+        }
+        break;
+    }
+    this.getTable()?.cellActionDescriptorsUpdated();
   }
 
   showContent($event: MouseEvent, content: string, title: string, contentType: ContentType = null, sortKeys = false): void {
@@ -304,20 +413,29 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
         break;
       case EventType.STATS:
         this.filterColumns.push(
-          {key: 'messagesProcessed', title: 'event.min-messages-processed'},
-          {key: 'errorsOccurred', title: 'event.min-errors-occurred'}
+          {key: 'minMessagesProcessed', title: 'event.min-messages-processed'},
+          {key: 'maxMessagesProcessed', title: 'event.max-messages-processed'},
+          {key: 'minErrorsOccurred', title: 'event.min-errors-occurred'},
+          {key: 'maxErrorsOccurred', title: 'event.max-errors-occurred'}
         );
         break;
       case DebugEventType.DEBUG_RULE_NODE:
-      case DebugEventType.DEBUG_RULE_CHAIN:
         this.filterColumns.push(
           {key: 'msgDirectionType', title: 'event.type'},
           {key: 'entityId', title: 'event.entity-id'},
-          {key: 'entityName', title: 'event.entity-type'},
+          {key: 'entityType', title: 'event.entity-type'},
+          {key: 'msgId', title: 'event.message-id'},
           {key: 'msgType', title: 'event.message-type'},
           {key: 'relationType', title: 'event.relation-type'},
           {key: 'dataSearch', title: 'event.data'},
           {key: 'metadataSearch', title: 'event.metadata'},
+          {key: 'isError', title: 'event.error'},
+          {key: 'errorStr', title: 'event.error'}
+        );
+        break;
+      case DebugEventType.DEBUG_RULE_CHAIN:
+        this.filterColumns.push(
+          {key: 'message', title: 'event.message'},
           {key: 'isError', title: 'event.error'},
           {key: 'errorStr', title: 'event.error'}
         );
@@ -331,8 +449,8 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
     }
 
     this.filterParams = {};
-    this.table.paginator.pageIndex = 0;
-    this.table.updateData();
+    this.getTable().paginator.pageIndex = 0;
+    this.updateData();
   }
 
   private editEventFilter($event: MouseEvent) {
@@ -340,17 +458,16 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
       $event.stopPropagation();
     }
     const target = $event.target || $event.srcElement || $event.currentTarget;
-    const config = new OverlayConfig();
-    config.backdropClass = 'cdk-overlay-transparent-backdrop';
-    config.hasBackdrop = true;
-    const connectedPosition: ConnectedPosition = {
-      originX: 'end',
-      originY: 'bottom',
-      overlayX: 'end',
-      overlayY: 'top'
-    };
-    config.positionStrategy = this.overlay.position().flexibleConnectedTo(target as HTMLElement)
-      .withPositions([connectedPosition]);
+    const config = new OverlayConfig({
+      panelClass: 'tb-panel-container',
+      backdropClass: 'cdk-overlay-transparent-backdrop',
+      hasBackdrop: true,
+      height: 'fit-content',
+      maxHeight: '65vh'
+    });
+    config.positionStrategy = this.overlay.position()
+      .flexibleConnectedTo(target as HTMLElement)
+      .withPositions(DEFAULT_OVERLAY_POSITIONS);
 
     const overlayRef = this.overlay.create(config);
     overlayRef.backdropClick().subscribe(() => {
@@ -372,11 +489,15 @@ export class EventTableConfig extends EntityTableConfig<Event, TimePageLink> {
     const injector = Injector.create({parent: this.viewContainerRef.injector, providers});
     const componentRef = overlayRef.attach(new ComponentPortal(EventFilterPanelComponent,
       this.viewContainerRef, injector));
+    const resizeWindows$ = fromEvent(window, 'resize').subscribe(() => {
+      overlayRef.updatePosition();
+    });
     componentRef.onDestroy(() => {
+      resizeWindows$.unsubscribe();
       if (componentRef.instance.result && !isEqual(this.filterParams, componentRef.instance.result.filterParams)) {
         this.filterParams = componentRef.instance.result.filterParams;
-        this.table.paginator.pageIndex = 0;
-        this.table.updateData();
+        this.getTable().paginator.pageIndex = 0;
+        this.updateData();
       }
     });
     this.cd.detectChanges();

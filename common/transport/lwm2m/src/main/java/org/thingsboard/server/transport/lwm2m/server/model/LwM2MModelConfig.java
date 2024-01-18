@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,14 +20,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.thingsboard.server.common.data.device.data.lwm2m.ObjectAttributes;
+import org.thingsboard.server.common.data.device.profile.lwm2m.ObjectAttributes;
 
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.thingsboard.common.util.CollectionsUtil.diffSets;
+import static org.thingsboard.server.common.data.util.CollectionsUtil.diffSets;
 
 @Data
 @NoArgsConstructor

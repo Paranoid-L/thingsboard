@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,10 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
+import org.thingsboard.server.common.data.BaseDataWithAdditionalInfo;
+import org.thingsboard.server.common.data.ExportableEntity;
 import org.thingsboard.server.common.data.HasName;
 import org.thingsboard.server.common.data.HasTenantId;
-import org.thingsboard.server.common.data.SearchTextBasedWithAdditionalInfo;
 import org.thingsboard.server.common.data.id.RuleChainId;
 import org.thingsboard.server.common.data.id.RuleNodeId;
 import org.thingsboard.server.common.data.id.TenantId;
@@ -35,11 +36,11 @@ import org.thingsboard.server.common.data.validation.NoXss;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @Slf4j
-public class RuleChain extends SearchTextBasedWithAdditionalInfo<RuleChainId> implements HasName, HasTenantId {
+public class RuleChain extends BaseDataWithAdditionalInfo<RuleChainId> implements HasName, HasTenantId, ExportableEntity<RuleChainId> {
 
     private static final long serialVersionUID = -5656679015121935465L;
 
-    @ApiModelProperty(position = 3, required = true, value = "JSON object with Tenant Id.", readOnly = true)
+    @ApiModelProperty(position = 3, required = true, value = "JSON object with Tenant Id.", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     private TenantId tenantId;
     @NoXss
     @Length(fieldName = "name")
@@ -55,6 +56,8 @@ public class RuleChain extends SearchTextBasedWithAdditionalInfo<RuleChainId> im
     private boolean debugMode;
     @ApiModelProperty(position = 9, value = "Reserved for future usage. The actual list of rule nodes and their relations is stored in the database separately.")
     private transient JsonNode configuration;
+
+    private RuleChainId externalId;
 
     @JsonIgnore
     private byte[] configurationBytes;
@@ -75,11 +78,7 @@ public class RuleChain extends SearchTextBasedWithAdditionalInfo<RuleChainId> im
         this.firstRuleNodeId = ruleChain.getFirstRuleNodeId();
         this.root = ruleChain.isRoot();
         this.setConfiguration(ruleChain.getConfiguration());
-    }
-
-    @Override
-    public String getSearchText() {
-        return getName();
+        this.setExternalId(ruleChain.getExternalId());
     }
 
     @Override
@@ -96,14 +95,14 @@ public class RuleChain extends SearchTextBasedWithAdditionalInfo<RuleChainId> im
         return super.getId();
     }
 
-    @ApiModelProperty(position = 2, value = "Timestamp of the rule chain creation, in milliseconds", example = "1609459200000", readOnly = true)
+    @ApiModelProperty(position = 2, value = "Timestamp of the rule chain creation, in milliseconds", example = "1609459200000", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     @Override
     public long getCreatedTime() {
         return super.getCreatedTime();
     }
 
     public JsonNode getConfiguration() {
-        return SearchTextBasedWithAdditionalInfo.getJson(() -> configuration, () -> configurationBytes);
+        return BaseDataWithAdditionalInfo.getJson(() -> configuration, () -> configurationBytes);
     }
 
     public void setConfiguration(JsonNode data) {

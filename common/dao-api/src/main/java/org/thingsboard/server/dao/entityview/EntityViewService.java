@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,16 +27,18 @@ import org.thingsboard.server.common.data.id.EntityViewId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.page.PageData;
 import org.thingsboard.server.common.data.page.PageLink;
-import org.thingsboard.server.common.data.page.TimePageLink;
+import org.thingsboard.server.dao.entity.EntityDaoService;
 
 import java.util.List;
 
 /**
  * Created by Victor Basanets on 8/27/2017.
  */
-public interface EntityViewService {
+public interface EntityViewService extends EntityDaoService {
 
     EntityView saveEntityView(EntityView entityView);
+
+    EntityView saveEntityView(EntityView entityView, boolean doValidate);
 
     EntityView assignEntityViewToCustomer(TenantId tenantId, EntityViewId entityViewId, CustomerId customerId);
 
@@ -47,6 +49,8 @@ public interface EntityViewService {
     EntityViewInfo findEntityViewInfoById(TenantId tenantId, EntityViewId entityViewId);
 
     EntityView findEntityViewById(TenantId tenantId, EntityViewId entityViewId);
+
+    EntityView findEntityViewById(TenantId tenantId, EntityViewId entityViewId, boolean putInCache);
 
     EntityView findEntityViewByTenantIdAndName(TenantId tenantId, String name);
 
@@ -71,6 +75,10 @@ public interface EntityViewService {
     ListenableFuture<EntityView> findEntityViewByIdAsync(TenantId tenantId, EntityViewId entityViewId);
 
     ListenableFuture<List<EntityView>> findEntityViewsByTenantIdAndEntityIdAsync(TenantId tenantId, EntityId entityId);
+
+    List<EntityView> findEntityViewsByTenantIdAndEntityId(TenantId tenantId, EntityId entityId);
+
+    boolean existsByTenantIdAndEntityId(TenantId tenantId, EntityId entityId);
 
     void deleteEntityView(TenantId tenantId, EntityViewId entityViewId);
 

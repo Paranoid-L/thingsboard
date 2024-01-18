@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@ package org.thingsboard.server.transport.coap.callback;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.californium.core.coap.MediaTypeRegistry;
 import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.core.coap.Response;
 import org.eclipse.californium.core.server.resources.CoapExchange;
+import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.transport.SessionMsgListener;
 import org.thingsboard.server.gen.transport.TransportProtos;
 import org.thingsboard.server.transport.coap.client.TbCoapClientState;
@@ -53,6 +53,11 @@ public abstract class AbstractSyncSessionCallback implements SessionMsgListener 
     }
 
     @Override
+    public void onDeviceDeleted(DeviceId deviceId) {
+
+    }
+
+    @Override
     public void onToDeviceRpcRequest(UUID sessionId, TransportProtos.ToDeviceRpcRequestMsg toDeviceRequest) {
         logUnsupportedCommandMessage(toDeviceRequest);
     }
@@ -76,6 +81,7 @@ public abstract class AbstractSyncSessionCallback implements SessionMsgListener 
 
     protected void respond(Response response) {
         response.getOptions().setContentFormat(TbCoapContentFormatUtil.getContentFormat(exchange.getRequestOptions().getContentFormat(), state.getContentFormat()));
+        response.setConfirmable(exchange.advanced().getRequest().isConfirmable());
         exchange.respond(response);
     }
 

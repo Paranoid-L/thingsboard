@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,11 @@ package org.thingsboard.server.dao;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.util.CollectionUtils;
+import org.thingsboard.server.common.data.EntityInfo;
+import org.thingsboard.server.common.data.EntitySubtype;
+import org.thingsboard.server.common.data.EntityType;
+import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.id.UUIDBased;
 import org.thingsboard.server.common.data.page.PageData;
 import org.thingsboard.server.common.data.page.PageLink;
@@ -28,16 +32,16 @@ import org.thingsboard.server.dao.model.ToData;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public abstract class DaoUtil {
-
-    public static final String DEFAULT_SORT_PROPERTY = "id";
-    public static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.ASC, DEFAULT_SORT_PROPERTY);
 
     private DaoUtil() {
     }
@@ -55,52 +59,16 @@ public abstract class DaoUtil {
         return toPageable(pageLink, Collections.emptyMap());
     }
 
-    public static Pageable toPageable(PageLink pageLink, Map<String,String> columnMap) {
-        return PageRequest.of(pageLink.getPage(), pageLink.getPageSize(), toSort(pageLink.getSortOrder(), columnMap));
+    public static Pageable toPageable(PageLink pageLink, Map<String, String> columnMap) {
+        return PageRequest.of(pageLink.getPage(), pageLink.getPageSize(), pageLink.toSort(pageLink.getSortOrder(), columnMap));
     }
 
     public static Pageable toPageable(PageLink pageLink, List<SortOrder> sortOrders) {
         return toPageable(pageLink, Collections.emptyMap(), sortOrders);
     }
 
-    public static Pageable toPageable(PageLink pageLink, Map<String,String> columnMap, List<SortOrder> sortOrders) {
-        return PageRequest.of(pageLink.getPage(), pageLink.getPageSize(), toSort(sortOrders, columnMap));
-    }
-
-    public static Sort toSort(SortOrder sortOrder) {
-        return toSort(sortOrder, Collections.emptyMap());
-    }
-
-    public static Sort toSort(SortOrder sortOrder, Map<String,String> columnMap) {
-        if (sortOrder == null) {
-            return DEFAULT_SORT;
-        } else {
-            String property = sortOrder.getProperty();
-            if (columnMap.containsKey(property)) {
-                property = columnMap.get(property);
-            }
-            return Sort.by(Sort.Direction.fromString(sortOrder.getDirection().name()), property);
-        }
-    }
-
-    public static Sort toSort(List<SortOrder> sortOrders) {
-        return toSort(sortOrders, Collections.emptyMap());
-    }
-
-    public static Sort toSort(List<SortOrder> sortOrders, Map<String,String> columnMap) {
-        return toSort(sortOrders, columnMap, Sort.NullHandling.NULLS_LAST);
-    }
-
-    public static Sort toSort(List<SortOrder> sortOrders, Map<String,String> columnMap, Sort.NullHandling nullHandlingHint) {
-        return Sort.by(sortOrders.stream().map(s -> toSortOrder(s, columnMap, nullHandlingHint)).collect(Collectors.toList()));
-    }
-
-    public static Sort.Order toSortOrder(SortOrder sortOrder, Map<String,String> columnMap, Sort.NullHandling nullHandlingHint) {
-        String property = sortOrder.getProperty();
-        if (columnMap.containsKey(property)) {
-            property = columnMap.get(property);
-        }
-        return new Sort.Order(Sort.Direction.fromString(sortOrder.getDirection().name()), property, nullHandlingHint);
+    public static Pageable toPageable(PageLink pageLink, Map<String, String> columnMap, List<SortOrder> sortOrders) {
+        return PageRequest.of(pageLink.getPage(), pageLink.getPageSize(), pageLink.toSort(sortOrders, columnMap));
     }
 
     public static <T> List<T> convertDataList(Collection<? extends ToData<T>> toDataList) {
@@ -146,6 +114,66 @@ public abstract class DaoUtil {
             ids.add(getId(idBased));
         }
         return ids;
+    }
+
+    public static <I> List<I> fromUUIDs(List<UUID> uuids, Function<UUID, I> mapper) {
+        return uuids.stream().map(mapper).collect(Collectors.toList());
+    }
+
+    public static <I> I toEntityId(UUID uuid, Function<UUID, I> creator) {
+        if (uuid != null) {
+            return creator.apply(uuid);
+        } else {
+            return null;
+        }
+    }
+
+    public static <T> void processInBatches(Function<PageLink, PageData<T>> finder, int batchSize, Consumer<T> processor) {
+        processBatches(finder, batchSize, batch -> batch.getData().forEach(processor));
+    }
+
+    public static <T> void processBatches(Function<PageLink, PageData<T>> finder, int batchSize, Consumer<PageData<T>> processor) {
+        PageLink pageLink = new PageLink(batchSize);
+        PageData<T> batch;
+
+        boolean hasNextBatch;
+        do {
+            batch = finder.apply(pageLink);
+            processor.accept(batch);
+
+            hasNextBatch = batch.hasNext();
+            pageLink = pageLink.nextPageLink();
+        } while (hasNextBatch);
+    }
+
+    public static String getStringId(UUIDBased id) {
+        if (id != null) {
+            return id.toString();
+        } else {
+            return null;
+        }
+    }
+
+    public static List<EntitySubtype> convertTenantEntityTypesToDto(UUID tenantUUID, EntityType entityType, List<String> types) {
+        if (CollectionUtils.isEmpty(types)) {
+            return Collections.emptyList();
+        }
+        TenantId tenantId = TenantId.fromUUID(tenantUUID);
+        return types.stream()
+                .map(type -> new EntitySubtype(tenantId, entityType, type))
+                .collect(Collectors.toList());
+    }
+
+    @Deprecated // used only in deprecated DAO api
+    public static List<EntitySubtype> convertTenantEntityInfosToDto(UUID tenantUUID, EntityType entityType, List<EntityInfo> entityInfos) {
+        if (CollectionUtils.isEmpty(entityInfos)) {
+            return Collections.emptyList();
+        }
+        var tenantId = TenantId.fromUUID(tenantUUID);
+        return entityInfos.stream()
+                .map(info -> new EntitySubtype(tenantId, entityType, info.getName()))
+                .sorted(Comparator.comparing(EntitySubtype::getType))
+                .collect(Collectors.toList());
     }
 
 }

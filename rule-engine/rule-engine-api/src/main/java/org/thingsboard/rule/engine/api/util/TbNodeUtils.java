@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,12 @@
  */
 package org.thingsboard.rule.engine.api.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.StringUtils;
+import org.thingsboard.common.util.JacksonUtil;
 import org.thingsboard.rule.engine.api.TbNodeConfiguration;
 import org.thingsboard.rule.engine.api.TbNodeException;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.msg.TbMsg;
 import org.thingsboard.server.common.msg.TbMsgMetaData;
 
@@ -37,15 +36,13 @@ import java.util.stream.Collectors;
  */
 public class TbNodeUtils {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-
     private static final Pattern DATA_PATTERN = Pattern.compile("(\\$\\[)(.*?)(])");
 
     public static <T> T convert(TbNodeConfiguration configuration, Class<T> clazz) throws TbNodeException {
         try {
-            return mapper.treeToValue(configuration.getData(), clazz);
-        } catch (JsonProcessingException e) {
-            throw new TbNodeException(e);
+            return JacksonUtil.treeToValue(configuration.getData(), clazz);
+        } catch (IllegalArgumentException e) {
+            throw new TbNodeException(e, true);
         }
     }
 
@@ -59,7 +56,7 @@ public class TbNodeUtils {
     public static String processPattern(String pattern, TbMsg tbMsg) {
         try {
             String result = processPattern(pattern, tbMsg.getMetaData());
-            JsonNode json = mapper.readTree(tbMsg.getData());
+            JsonNode json = JacksonUtil.toJsonNode(tbMsg.getData());
             if (json.isObject()) {
                 Matcher matcher = DATA_PATTERN.matcher(result);
                 while (matcher.find()) {
@@ -86,6 +83,7 @@ public class TbNodeUtils {
         }
     }
 
+    @Deprecated(since = "3.6.1", forRemoval = true)
     public static List<String> processPatterns(List<String> patterns, TbMsgMetaData metaData) {
         if (!CollectionUtils.isEmpty(patterns)) {
             return patterns.stream().map(p -> processPattern(p, metaData)).collect(Collectors.toList());
@@ -94,9 +92,13 @@ public class TbNodeUtils {
     }
 
     public static String processPattern(String pattern, TbMsgMetaData metaData) {
-        String result = pattern;
-        for (Map.Entry<String, String> keyVal : metaData.values().entrySet()) {
-            result = processVar(result, keyVal.getKey(), keyVal.getValue());
+        return processTemplate(pattern, metaData.values());
+    }
+
+    public static String processTemplate(String template, Map<String, String> data) {
+        String result = template;
+        for (Map.Entry<String, String> kv : data.entrySet()) {
+            result = processVar(result, kv.getKey(), kv.getValue());
         }
         return result;
     }

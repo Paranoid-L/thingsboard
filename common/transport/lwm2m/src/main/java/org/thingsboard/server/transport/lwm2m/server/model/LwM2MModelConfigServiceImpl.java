@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-import org.thingsboard.server.common.data.device.data.lwm2m.ObjectAttributes;
+import org.thingsboard.server.common.data.device.profile.lwm2m.ObjectAttributes;
 import org.thingsboard.server.queue.util.AfterStartUp;
 import org.thingsboard.server.queue.util.TbLwM2mTransportComponent;
 import org.thingsboard.server.transport.lwm2m.server.client.LwM2mClient;
@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
 public class LwM2MModelConfigServiceImpl implements LwM2MModelConfigService {
 
     @Autowired
-    private TbLwM2MModelConfigStore modelStore;
+    TbLwM2MModelConfigStore modelStore;
 
     @Autowired
     @Lazy
@@ -67,14 +67,14 @@ public class LwM2MModelConfigServiceImpl implements LwM2MModelConfigService {
     @Autowired
     private LwM2MTelemetryLogService logService;
 
-    private ConcurrentMap<String, LwM2MModelConfig> currentModelConfigs;
+    ConcurrentMap<String, LwM2MModelConfig> currentModelConfigs;
 
-    @AfterStartUp(order = Integer.MAX_VALUE - 1)
-    private void init() {
+    @AfterStartUp(order = AfterStartUp.BEFORE_TRANSPORT_SERVICE)
+    public void init() {
         List<LwM2MModelConfig> models = modelStore.getAll();
         log.debug("Fetched model configs: {}", models);
         currentModelConfigs = models.stream()
-                .collect(Collectors.toConcurrentMap(LwM2MModelConfig::getEndpoint, m -> m));
+                .collect(Collectors.toConcurrentMap(LwM2MModelConfig::getEndpoint, m -> m, (existing, replacement) -> existing));
     }
 
     @Override

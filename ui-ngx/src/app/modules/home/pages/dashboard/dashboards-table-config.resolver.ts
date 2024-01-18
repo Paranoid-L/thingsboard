@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import {
 import {
   Dashboard,
   DashboardInfo,
+  DashboardSetup,
   getDashboardAssignedCustomersText,
   isCurrentPublicDashboardCustomer,
   isPublicDashboard
@@ -63,12 +64,19 @@ import {
   MakeDashboardPublicDialogData
 } from '@modules/home/pages/dashboard/make-dashboard-public-dialog.component';
 import { DashboardTabsComponent } from '@home/pages/dashboard/dashboard-tabs.component';
-import { ImportExportService } from '@home/components/import-export/import-export.service';
+import { ImportExportService } from '@shared/import-export/import-export.service';
 import { EdgeService } from '@core/http/edge.service';
 import {
   AddEntitiesToEdgeDialogComponent,
   AddEntitiesToEdgeDialogData
 } from '@home/dialogs/add-entities-to-edge-dialog.component';
+import { HomeDialogsService } from '@home/dialogs/home-dialogs.service';
+import { Widget } from '@shared/models/widget.models';
+import { EntityAliases } from '@shared/models/alias.models';
+import {
+  EntityAliasesDialogComponent,
+  EntityAliasesDialogData
+} from '@home/components/alias/entity-aliases-dialog.component';
 
 @Injectable()
 export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<DashboardInfo | Dashboard>> {
@@ -80,6 +88,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
               private customerService: CustomerService,
               private edgeService: EdgeService,
               private dialogService: DialogService,
+              private homeDialogs: HomeDialogsService,
               private importExport: ImportExportService,
               private translate: TranslateService,
               private datePipe: DatePipe,
@@ -92,6 +101,8 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     this.config.entityTranslations = entityTypeTranslations.get(EntityType.DASHBOARD);
     this.config.entityResources = entityTypeResources.get(EntityType.DASHBOARD);
 
+    this.config.rowPointer = true;
+
     this.config.deleteEntityTitle = dashboard =>
       this.translate.instant('dashboard.delete-dashboard-title', {dashboardTitle: dashboard.title});
     this.config.deleteEntityContent = () => this.translate.instant('dashboard.delete-dashboard-text');
@@ -99,11 +110,23 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     this.config.deleteEntitiesContent = () => this.translate.instant('dashboard.delete-dashboards-text');
 
     this.config.loadEntity = id => this.dashboardService.getDashboard(id.id);
-    this.config.saveEntity = dashboard => {
-      return this.dashboardService.saveDashboard(dashboard as Dashboard);
-    };
+    this.config.saveEntity = dashboard => this.saveAndAssignDashboard(dashboard as DashboardSetup);
     this.config.onEntityAction = action => this.onDashboardAction(action);
-    this.config.detailsReadonly = () => (this.config.componentsData.dashboardScope === 'customer_user' || this.config.componentsData.dashboardScope === 'edge_customer_user');
+    this.config.detailsReadonly = () => (this.config.componentsData.dashboardScope === 'customer_user' ||
+      this.config.componentsData.dashboardScope === 'edge_customer_user');
+
+    this.config.handleRowClick = ($event, dashboard) => {
+      if (this.config.isDetailsOpen()) {
+        this.config.toggleEntityDetails($event, dashboard);
+      } else {
+        this.openDashboard($event, dashboard);
+      }
+      return true;
+    };
+
+    this.config.entityAdded = dashboard => {
+      this.openDashboard(null, dashboard);
+    };
   }
 
   resolve(route: ActivatedRouteSnapshot): Observable<EntityTableConfig<DashboardInfo | Dashboard>> {
@@ -147,7 +170,8 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
         this.config.cellActionDescriptors = this.configureCellActions(this.config.componentsData.dashboardScope);
         this.config.groupActionDescriptors = this.configureGroupActions(this.config.componentsData.dashboardScope);
         this.config.addActionDescriptors = this.configureAddActions(this.config.componentsData.dashboardScope);
-        this.config.addEnabled = !(this.config.componentsData.dashboardScope === 'customer_user' || this.config.componentsData.dashboardScope === 'edge_customer_user');
+        this.config.addEnabled = !(this.config.componentsData.dashboardScope === 'customer_user' ||
+          this.config.componentsData.dashboardScope === 'edge_customer_user');
         this.config.entitiesDeleteEnabled = this.config.componentsData.dashboardScope === 'tenant';
         this.config.deleteEnabled = () => this.config.componentsData.dashboardScope === 'tenant';
         return this.config;
@@ -163,13 +187,9 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     if (dashboardScope === 'tenant') {
       columns.push(
         new EntityTableColumn<DashboardInfo>('customersTitle', 'dashboard.assignedToCustomers',
-          '50%', entity => {
-            return getDashboardAssignedCustomersText(entity);
-          }, () => ({}), false),
+          '50%', entity => getDashboardAssignedCustomersText(entity), () => ({}), false),
         new EntityTableColumn<DashboardInfo>('dashboardIsPublic', 'dashboard.public', '60px',
-          entity => {
-            return checkBoxCell(isPublicDashboard(entity));
-          }, () => ({}), false),
+          entity => checkBoxCell(isPublicDashboard(entity)), () => ({}), false),
       );
     }
     return columns;
@@ -193,14 +213,6 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
 
   configureCellActions(dashboardScope: string): Array<CellActionDescriptor<DashboardInfo>> {
     const actions: Array<CellActionDescriptor<DashboardInfo>> = [];
-    actions.push(
-      {
-        name: this.translate.instant('dashboard.open-dashboard'),
-        icon: 'dashboard',
-        isEnabled: () => true,
-        onAction: ($event, entity) => this.openDashboard($event, entity)
-      }
-    );
     if (dashboardScope === 'tenant') {
       actions.push(
         {
@@ -262,11 +274,19 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
         {
           name: this.translate.instant('edge.unassign-from-edge'),
           icon: 'assignment_return',
-          isEnabled: (entity) => true,
+          isEnabled: () => true,
           onAction: ($event, entity) => this.unassignFromEdge($event, entity)
         }
       );
     }
+    actions.push(
+      {
+        name: this.translate.instant('dashboard.dashboard-details'),
+        icon: 'edit',
+        isEnabled: () => true,
+        onAction: ($event, entity) => this.config.toggleEntityDetails($event, entity)
+      }
+    );
     return actions;
   }
 
@@ -322,7 +342,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
           name: this.translate.instant('dashboard.create-new-dashboard'),
           icon: 'insert_drive_file',
           isEnabled: () => true,
-          onAction: ($event) => this.config.table.addEntity($event)
+          onAction: ($event) => this.config.getTable().addEntity($event)
         },
         {
           name: this.translate.instant('dashboard.import'),
@@ -368,14 +388,38 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     }
   }
 
-  importDashboard($event: Event) {
-    this.importExport.importDashboard().subscribe(
+  importDashboard(_$event: Event) {
+    this.importExport.importDashboard(this.editMissingAliases.bind(this)).subscribe(
       (dashboard) => {
         if (dashboard) {
-          this.config.table.updateData();
+          this.config.updateData();
         }
       }
     );
+  }
+
+  private editMissingAliases(widgets: Array<Widget>, isSingleWidget: boolean,
+                             customTitle: string, missingEntityAliases: EntityAliases): Observable<EntityAliases> {
+    return this.dialog.open<EntityAliasesDialogComponent, EntityAliasesDialogData,
+      EntityAliases>(EntityAliasesDialogComponent, {
+      disableClose: true,
+      panelClass: ['tb-dialog', 'tb-fullscreen-dialog'],
+      data: {
+        entityAliases: missingEntityAliases,
+        widgets,
+        customTitle,
+        isSingleWidget,
+        disableAdd: true
+      }
+    }).afterClosed().pipe(
+      map((updatedEntityAliases) => {
+          if (updatedEntityAliases) {
+            return updatedEntityAliases;
+          } else {
+            throw new Error('Unable to resolve missing entity aliases!');
+          }
+        }
+      ));
   }
 
   exportDashboard($event: Event, dashboard: DashboardInfo) {
@@ -400,7 +444,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     }).afterClosed()
       .subscribe((res) => {
         if (res) {
-          this.config.table.updateData();
+          this.config.updateData();
         }
       });
   }
@@ -420,7 +464,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
           }
         }).afterClosed()
           .subscribe(() => {
-            this.config.table.updateData();
+            this.config.updateData();
           });
       }
     );
@@ -440,7 +484,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.dashboardService.makeDashboardPrivate(dashboard.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData();
             }
           );
         }
@@ -480,7 +524,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     }).afterClosed()
       .subscribe((res) => {
         if (res) {
-          this.config.table.updateData();
+          this.config.updateData();
         }
       });
   }
@@ -499,7 +543,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.dashboardService.unassignDashboardFromCustomer(customerId, dashboard.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData(this.config.componentsData.dashboardScope !== 'tenant');
             }
           );
         }
@@ -527,7 +571,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
           );
           forkJoin(tasks).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData();
             }
           );
         }
@@ -577,7 +621,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
     }).afterClosed()
       .subscribe((res) => {
         if (res) {
-          this.config.table.updateData();
+          this.config.updateData();
         }
       });
   }
@@ -596,7 +640,7 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
         if (res) {
           this.dashboardService.unassignDashboardFromEdge(this.config.componentsData.edgeId, dashboard.id.id).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData(this.config.componentsData.dashboardScope !== 'tenant');
             }
           );
         }
@@ -624,11 +668,24 @@ export class DashboardsTableConfigResolver implements Resolve<EntityTableConfig<
           );
           forkJoin(tasks).subscribe(
             () => {
-              this.config.table.updateData();
+              this.config.updateData();
             }
           );
         }
       }
+    );
+  }
+
+  saveAndAssignDashboard(dashboard: DashboardSetup): Observable<Dashboard> {
+    const {assignedCustomerIds, ...dashboardToCreate} = dashboard;
+
+    return this.dashboardService.saveDashboard(dashboardToCreate as Dashboard).pipe(
+      mergeMap((createdDashboard) => {
+        if (assignedCustomerIds?.length) {
+          return this.dashboardService.addDashboardCustomers(createdDashboard.id.id, assignedCustomerIds);
+        }
+        return of(createdDashboard);
+      })
     );
   }
 

@@ -1,5 +1,5 @@
 ///
-/// Copyright © 2016-2021 The Thingsboard Authors
+/// Copyright © 2016-2024 The Thingsboard Authors
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -36,7 +36,6 @@ import { EditAttributeValuePanelComponent } from '@home/components/attribute/edi
 import { DashboardComponent } from '@home/components/dashboard/dashboard.component';
 import { WidgetComponent } from '@home/components/widget/widget.component';
 import { WidgetComponentService } from '@home/components/widget/widget-component.service';
-import { LegendComponent } from '@home/components/widget/legend.component';
 import { AliasesEntitySelectPanelComponent } from '@home/components/alias/aliases-entity-select-panel.component';
 import { AliasesEntitySelectComponent } from '@home/components/alias/aliases-entity-select.component';
 import { WidgetConfigComponent } from '@home/components/widget/widget-config.component';
@@ -45,11 +44,6 @@ import { EntityFilterViewComponent } from '@home/components/entity/entity-filter
 import { EntityAliasDialogComponent } from '@home/components/alias/entity-alias-dialog.component';
 import { EntityFilterComponent } from '@home/components/entity/entity-filter.component';
 import { RelationFiltersComponent } from '@home/components/relation/relation-filters.component';
-import { EntityAliasSelectComponent } from '@home/components/alias/entity-alias-select.component';
-import { DataKeysComponent } from '@home/components/widget/data-keys.component';
-import { DataKeyConfigDialogComponent } from '@home/components/widget/data-key-config-dialog.component';
-import { DataKeyConfigComponent } from '@home/components/widget/data-key-config.component';
-import { LegendConfigComponent } from '@home/components/widget/legend-config.component';
 import { ManageWidgetActionsComponent } from '@home/components/widget/action/manage-widget-actions.component';
 import { WidgetActionDialogComponent } from '@home/components/widget/action/widget-action-dialog.component';
 import { CustomActionPrettyResourcesTabsComponent } from '@home/components/widget/action/custom-action-pretty-resources-tabs.component';
@@ -57,11 +51,7 @@ import { CustomActionPrettyEditorComponent } from '@home/components/widget/actio
 import { MobileActionEditorComponent } from '@home/components/widget/action/mobile-action-editor.component';
 import { CustomDialogService } from '@home/components/widget/dialog/custom-dialog.service';
 import { CustomDialogContainerComponent } from '@home/components/widget/dialog/custom-dialog-container.component';
-import { ImportExportService } from '@home/components/import-export/import-export.service';
-import { ImportDialogComponent } from '@home/components/import-export/import-dialog.component';
 import { AddWidgetToDashboardDialogComponent } from '@home/components/attribute/add-widget-to-dashboard-dialog.component';
-import { ImportDialogCsvComponent } from '@home/components/import-export/import-dialog-csv.component';
-import { TableColumnsAssignmentComponent } from '@home/components/import-export/table-columns-assignment.component';
 import { EventContentDialogComponent } from '@home/components/event/event-content-dialog.component';
 import { SharedHomeComponentsModule } from '@home/components/shared-home-components.module';
 import { SelectTargetLayoutDialogComponent } from '@home/components/dashboard/select-target-layout-dialog.component';
@@ -78,7 +68,6 @@ import { ComplexFilterPredicateDialogComponent } from '@home/components/filter/c
 import { KeyFilterDialogComponent } from '@home/components/filter/key-filter-dialog.component';
 import { FiltersDialogComponent } from '@home/components/filter/filters-dialog.component';
 import { FilterDialogComponent } from '@home/components/filter/filter-dialog.component';
-import { FilterSelectComponent } from '@home/components/filter/filter-select.component';
 import { FiltersEditComponent } from '@home/components/filter/filters-edit.component';
 import { FiltersEditPanelComponent } from '@home/components/filter/filters-edit-panel.component';
 import { UserFilterDialogComponent } from '@home/components/filter/user-filter-dialog.component';
@@ -117,6 +106,7 @@ import { DefaultTenantProfileConfigurationComponent } from '@home/components/pro
 import { TenantProfileConfigurationComponent } from '@home/components/profile/tenant/tenant-profile-configuration.component';
 import { SmsProviderConfigurationComponent } from '@home/components/sms/sms-provider-configuration.component';
 import { AwsSnsProviderConfigurationComponent } from '@home/components/sms/aws-sns-provider-configuration.component';
+import { SmppSmsProviderConfigurationComponent } from '@home/components/sms/smpp-sms-provider-configuration.component';
 import { TwilioSmsProviderConfigurationComponent } from '@home/components/sms/twilio-sms-provider-configuration.component';
 import { Lwm2mProfileComponentsModule } from '@home/components/profile/device/lwm2m/lwm2m-profile-components.module';
 import { DashboardPageComponent } from '@home/components/dashboard-page/dashboard-page.component';
@@ -138,7 +128,7 @@ import { DisplayWidgetTypesPanelComponent } from '@home/components/dashboard-pag
 import { AlarmDurationPredicateValueComponent } from '@home/components/profile/alarm/alarm-duration-predicate-value.component';
 import { DashboardImageDialogComponent } from '@home/components/dashboard-page/dashboard-image-dialog.component';
 import { WidgetContainerComponent } from '@home/components/widget/widget-container.component';
-import { SnmpDeviceProfileTransportModule } from '@home/components/profile/device/snpm/snmp-device-profile-transport.module';
+import { SnmpDeviceProfileTransportModule } from '@home/components/profile/device/snmp/snmp-device-profile-transport.module';
 import { DeviceCredentialsModule } from '@home/components/device/device-credentials.module';
 import { DeviceProfileCommonModule } from '@home/components/profile/device/common/device-profile-common.module';
 import {
@@ -147,14 +137,53 @@ import {
   HOME_COMPONENTS_MODULE_TOKEN
 } from '@home/components/tokens';
 import { DashboardStateComponent } from '@home/components/dashboard-page/dashboard-state.component';
+import { AlarmDynamicValue } from '@home/components/profile/alarm/alarm-dynamic-value.component';
+import { EntityDetailsPageComponent } from '@home/components/entity/entity-details-page.component';
+import { TenantProfileQueuesComponent } from '@home/components/profile/queue/tenant-profile-queues.component';
+import { QueueFormComponent } from '@home/components/queue/queue-form.component';
+import { RepositorySettingsComponent } from '@home/components/vc/repository-settings.component';
+import { VersionControlComponent } from '@home/components/vc/version-control.component';
+import { EntityVersionsTableComponent } from '@home/components/vc/entity-versions-table.component';
+import { EntityVersionCreateComponent } from '@home/components/vc/entity-version-create.component';
+import { EntityVersionRestoreComponent } from '@home/components/vc/entity-version-restore.component';
+import { EntityVersionDiffComponent } from '@home/components/vc/entity-version-diff.component';
+import { ComplexVersionCreateComponent } from '@home/components/vc/complex-version-create.component';
+import { EntityTypesVersionCreateComponent } from '@home/components/vc/entity-types-version-create.component';
+import { EntityTypesVersionLoadComponent } from '@home/components/vc/entity-types-version-load.component';
+import { ComplexVersionLoadComponent } from '@home/components/vc/complex-version-load.component';
+import { RemoveOtherEntitiesConfirmComponent } from '@home/components/vc/remove-other-entities-confirm.component';
+import { AutoCommitSettingsComponent } from '@home/components/vc/auto-commit-settings.component';
+import { RateLimitsListComponent } from '@home/components/profile/tenant/rate-limits/rate-limits-list.component';
+import { RateLimitsComponent } from '@home/components/profile/tenant/rate-limits/rate-limits.component';
+import { RateLimitsTextComponent } from '@home/components/profile/tenant/rate-limits/rate-limits-text.component';
+import { RateLimitsDetailsDialogComponent } from '@home/components/profile/tenant/rate-limits/rate-limits-details-dialog.component';
+import { AssetProfileComponent } from '@home/components/profile/asset-profile.component';
+import { AssetProfileDialogComponent } from '@home/components/profile/asset-profile-dialog.component';
+import { AssetProfileAutocompleteComponent } from '@home/components/profile/asset-profile-autocomplete.component';
+import { MODULES_MAP } from '@shared/models/constants';
+import { modulesMap } from '@modules/common/modules-map';
+import { AlarmAssigneePanelComponent } from '@home/components/alarm/alarm-assignee-panel.component';
+import { RouterTabsComponent } from '@home/components/router-tabs.component';
+import { SendNotificationButtonComponent } from '@home/components/notification/send-notification-button.component';
+import { AlarmAssigneeSelectPanelComponent } from '@home/components/alarm/alarm-assignee-select-panel.component';
+import { DeviceInfoFilterComponent } from '@home/components/device/device-info-filter.component';
+import { WidgetPreviewComponent } from '@home/components/widget/widget-preview.component';
+import {
+  ManageWidgetActionsDialogComponent
+} from '@home/components/widget/action/manage-widget-actions-dialog.component';
+import { WidgetConfigComponentsModule } from '@home/components/widget/config/widget-config-components.module';
+import { BasicWidgetConfigModule } from '@home/components/widget/config/basic/basic-widget-config.module';
+import { DeleteTimeseriesPanelComponent } from '@home/components/attribute/delete-timeseries-panel.component';
 
 @NgModule({
   declarations:
     [
+      RouterTabsComponent,
       EntitiesTableComponent,
       AddEntityDialogComponent,
       DetailsPanelComponent,
       EntityDetailsPanelComponent,
+      EntityDetailsPageComponent,
       AuditLogTableComponent,
       AuditLogDetailsDialogComponent,
       EventContentDialogComponent,
@@ -168,9 +197,12 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
       RelationFiltersComponent,
       AlarmTableHeaderComponent,
       AlarmTableComponent,
+      AlarmAssigneePanelComponent,
+      AlarmAssigneeSelectPanelComponent,
       AttributeTableComponent,
       AddAttributeDialogComponent,
       EditAttributeValuePanelComponent,
+      DeleteTimeseriesPanelComponent,
       AliasesEntitySelectPanelComponent,
       AliasesEntitySelectComponent,
       AliasesEntityAutocompleteComponent,
@@ -179,27 +211,20 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
       DashboardComponent,
       WidgetContainerComponent,
       WidgetComponent,
-      LegendComponent,
       WidgetConfigComponent,
+      WidgetPreviewComponent,
       EntityFilterViewComponent,
       EntityFilterComponent,
-      EntityAliasSelectComponent,
-      DataKeysComponent,
-      DataKeyConfigComponent,
-      DataKeyConfigDialogComponent,
-      LegendConfigComponent,
       ManageWidgetActionsComponent,
       WidgetActionDialogComponent,
+      ManageWidgetActionsDialogComponent,
       CustomActionPrettyResourcesTabsComponent,
       CustomActionPrettyEditorComponent,
       MobileActionEditorComponent,
       CustomDialogContainerComponent,
-      ImportDialogComponent,
-      ImportDialogCsvComponent,
       SelectTargetLayoutDialogComponent,
       SelectTargetStateDialogComponent,
       AddWidgetToDashboardDialogComponent,
-      TableColumnsAssignmentComponent,
       BooleanFilterPredicateComponent,
       StringFilterPredicateComponent,
       NumericFilterPredicateComponent,
@@ -211,7 +236,6 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
       KeyFilterDialogComponent,
       FilterDialogComponent,
       FiltersDialogComponent,
-      FilterSelectComponent,
       FilterTextComponent,
       FiltersEditComponent,
       FiltersEditPanelComponent,
@@ -241,16 +265,22 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
       DeviceProfileComponent,
       DeviceProfileDialogComponent,
       AddDeviceProfileDialogComponent,
+      DeviceInfoFilterComponent,
+      AssetProfileComponent,
+      AssetProfileDialogComponent,
+      AssetProfileAutocompleteComponent,
       RuleChainAutocompleteComponent,
       AlarmScheduleInfoComponent,
       DeviceProfileProvisionConfigurationComponent,
       AlarmScheduleComponent,
+      AlarmDynamicValue,
       AlarmDurationPredicateValueComponent,
       DeviceWizardDialogComponent,
       AlarmScheduleDialogComponent,
       EditAlarmDetailsDialogComponent,
       SmsProviderConfigurationComponent,
       AwsSnsProviderConfigurationComponent,
+      SmppSmsProviderConfigurationComponent,
       TwilioSmsProviderConfigurationComponent,
       DashboardToolbarComponent,
       DashboardPageComponent,
@@ -265,12 +295,33 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
       DashboardStateDialogComponent,
       DashboardImageDialogComponent,
       EmbedDashboardDialogComponent,
-      DisplayWidgetTypesPanelComponent
+      DisplayWidgetTypesPanelComponent,
+      TenantProfileQueuesComponent,
+      QueueFormComponent,
+      RepositorySettingsComponent,
+      VersionControlComponent,
+      EntityVersionsTableComponent,
+      EntityVersionCreateComponent,
+      EntityVersionRestoreComponent,
+      EntityVersionDiffComponent,
+      ComplexVersionCreateComponent,
+      EntityTypesVersionCreateComponent,
+      EntityTypesVersionLoadComponent,
+      ComplexVersionLoadComponent,
+      RemoveOtherEntitiesConfirmComponent,
+      AutoCommitSettingsComponent,
+      RateLimitsListComponent,
+      RateLimitsComponent,
+      RateLimitsTextComponent,
+      RateLimitsDetailsDialogComponent,
+      SendNotificationButtonComponent
     ],
   imports: [
     CommonModule,
     SharedModule,
     SharedHomeComponentsModule,
+    WidgetConfigComponentsModule,
+    BasicWidgetConfigModule,
     Lwm2mProfileComponentsModule,
     SnmpDeviceProfileTransportModule,
     StatesControllerModule,
@@ -278,10 +329,12 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
     DeviceProfileCommonModule
   ],
   exports: [
+    RouterTabsComponent,
     EntitiesTableComponent,
     AddEntityDialogComponent,
     DetailsPanelComponent,
     EntityDetailsPanelComponent,
+    EntityDetailsPageComponent,
     AuditLogTableComponent,
     EventTableComponent,
     EdgeDownlinkTableHeaderComponent,
@@ -289,6 +342,8 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
     RelationTableComponent,
     RelationFiltersComponent,
     AlarmTableComponent,
+    AlarmAssigneePanelComponent,
+    AlarmAssigneeSelectPanelComponent,
     AttributeTableComponent,
     AliasesEntitySelectComponent,
     AliasesEntityAutocompleteComponent,
@@ -297,24 +352,17 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
     DashboardComponent,
     WidgetContainerComponent,
     WidgetComponent,
-    LegendComponent,
     WidgetConfigComponent,
+    WidgetPreviewComponent,
     EntityFilterViewComponent,
     EntityFilterComponent,
-    EntityAliasSelectComponent,
-    DataKeysComponent,
-    DataKeyConfigComponent,
-    DataKeyConfigDialogComponent,
-    LegendConfigComponent,
     ManageWidgetActionsComponent,
     WidgetActionDialogComponent,
+    ManageWidgetActionsDialogComponent,
     CustomActionPrettyResourcesTabsComponent,
     CustomActionPrettyEditorComponent,
     MobileActionEditorComponent,
     CustomDialogContainerComponent,
-    ImportDialogComponent,
-    ImportDialogCsvComponent,
-    TableColumnsAssignmentComponent,
     SelectTargetLayoutDialogComponent,
     SelectTargetStateDialogComponent,
     BooleanFilterPredicateComponent,
@@ -328,7 +376,6 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
     KeyFilterDialogComponent,
     FilterDialogComponent,
     FiltersDialogComponent,
-    FilterSelectComponent,
     FilterTextComponent,
     FiltersEditComponent,
     UserFilterDialogComponent,
@@ -352,17 +399,22 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
     DeviceProfileComponent,
     DeviceProfileDialogComponent,
     AddDeviceProfileDialogComponent,
+    DeviceInfoFilterComponent,
     RuleChainAutocompleteComponent,
     DeviceWizardDialogComponent,
+    AssetProfileComponent,
+    AssetProfileDialogComponent,
+    AssetProfileAutocompleteComponent,
     AlarmScheduleInfoComponent,
     AlarmScheduleComponent,
+    AlarmDynamicValue,
     AlarmScheduleDialogComponent,
     AlarmDurationPredicateValueComponent,
     EditAlarmDetailsDialogComponent,
     DeviceProfileProvisionConfigurationComponent,
-    AlarmScheduleComponent,
     SmsProviderConfigurationComponent,
     AwsSnsProviderConfigurationComponent,
+    SmppSmsProviderConfigurationComponent,
     TwilioSmsProviderConfigurationComponent,
     DashboardToolbarComponent,
     DashboardPageComponent,
@@ -377,16 +429,35 @@ import { DashboardStateComponent } from '@home/components/dashboard-page/dashboa
     DashboardStateDialogComponent,
     DashboardImageDialogComponent,
     EmbedDashboardDialogComponent,
-    DisplayWidgetTypesPanelComponent
+    DisplayWidgetTypesPanelComponent,
+    TenantProfileQueuesComponent,
+    QueueFormComponent,
+    RepositorySettingsComponent,
+    VersionControlComponent,
+    EntityVersionsTableComponent,
+    EntityVersionCreateComponent,
+    EntityVersionRestoreComponent,
+    EntityVersionDiffComponent,
+    ComplexVersionCreateComponent,
+    EntityTypesVersionCreateComponent,
+    EntityTypesVersionLoadComponent,
+    ComplexVersionLoadComponent,
+    RemoveOtherEntitiesConfirmComponent,
+    AutoCommitSettingsComponent,
+    RateLimitsListComponent,
+    RateLimitsComponent,
+    RateLimitsTextComponent,
+    RateLimitsDetailsDialogComponent,
+    SendNotificationButtonComponent
   ],
   providers: [
     WidgetComponentService,
     CustomDialogService,
-    ImportExportService,
     {provide: EMBED_DASHBOARD_DIALOG_TOKEN, useValue: EmbedDashboardDialogComponent},
     {provide: COMPLEX_FILTER_PREDICATE_DIALOG_COMPONENT_TOKEN, useValue: ComplexFilterPredicateDialogComponent},
     {provide: DASHBOARD_PAGE_COMPONENT_TOKEN, useValue: DashboardPageComponent},
-    {provide: HOME_COMPONENTS_MODULE_TOKEN, useValue: HomeComponentsModule }
+    {provide: HOME_COMPONENTS_MODULE_TOKEN, useValue: HomeComponentsModule },
+    {provide: MODULES_MAP, useValue: modulesMap}
   ]
 })
 export class HomeComponentsModule { }

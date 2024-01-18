@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
  */
 package org.thingsboard.server.transport.lwm2m.server.uplink;
 
+import org.eclipse.leshan.core.node.codec.LwM2mValueConverter;
 import org.eclipse.leshan.core.observation.Observation;
+import org.eclipse.leshan.core.request.CreateRequest;
+import org.eclipse.leshan.core.request.SendRequest;
 import org.eclipse.leshan.core.request.WriteCompositeRequest;
 import org.eclipse.leshan.core.request.WriteRequest;
 import org.eclipse.leshan.core.response.ReadCompositeResponse;
@@ -45,6 +48,8 @@ public interface LwM2mUplinkMsgHandler {
 
     void onUpdateValueAfterReadCompositeResponse(Registration registration, ReadCompositeResponse response);
 
+    void onUpdateValueWithSendRequest(Registration registration, SendRequest sendRequest);
+
     void onDeviceProfileUpdate(TransportProtos.SessionInfoProto sessionInfo, DeviceProfile deviceProfile);
 
     void onDeviceUpdate(TransportProtos.SessionInfoProto sessionInfo, Device device, Optional<DeviceProfile> deviceProfileOpt);
@@ -57,11 +62,18 @@ public interface LwM2mUplinkMsgHandler {
 
     void onAwakeDev(Registration registration);
 
-    void onWriteResponseOk(LwM2mClient client, String path, WriteRequest request);
+    void onWriteResponseOk(LwM2mClient client, String path, WriteRequest request, int code);
 
-    void onWriteCompositeResponseOk(LwM2mClient client, WriteCompositeRequest request);
+    void onCreateResponseOk(LwM2mClient client, String path, CreateRequest request);
+
+    void onWriteCompositeResponseOk(LwM2mClient client, WriteCompositeRequest request, int code);
 
     void onToTransportUpdateCredentials(TransportProtos.SessionInfoProto sessionInfo, TransportProtos.ToTransportUpdateCredentialsProto updateCredentials);
 
+    void initAttributes(LwM2mClient lwM2MClient, boolean logFailedUpdateOfNonChangedValue);
+
     LwM2MTransportServerConfig getConfig();
+
+    LwM2mValueConverter getConverter();
+
 }

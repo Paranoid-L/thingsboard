@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,12 @@ import io.netty.handler.codec.mqtt.MqttMessage;
 import io.netty.handler.codec.mqtt.MqttPublishMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
+import org.thingsboard.server.common.adaptor.AdaptorException;
+import org.thingsboard.server.common.adaptor.JsonConverter;
+import org.thingsboard.server.common.adaptor.ProtoConverter;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.device.profile.MqttTopics;
 import org.thingsboard.server.common.data.ota.OtaPackageType;
-import org.thingsboard.server.common.transport.adaptor.AdaptorException;
-import org.thingsboard.server.common.transport.adaptor.JsonConverter;
-import org.thingsboard.server.common.transport.adaptor.ProtoConverter;
 import org.thingsboard.server.gen.transport.TransportApiProtos;
 import org.thingsboard.server.gen.transport.TransportProtos;
 import org.thingsboard.server.transport.mqtt.session.DeviceSessionCtx;
@@ -52,7 +52,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
         try {
             return JsonConverter.convertToTelemetryProto(new JsonParser().parse(ProtoConverter.dynamicMsgToJson(bytes, telemetryDynamicMsgDescriptor)));
         } catch (Exception e) {
-            log.warn("Failed to decode post telemetry request", e);
+            log.debug("Failed to decode post telemetry request", e);
             throw new AdaptorException(e);
         }
     }
@@ -65,7 +65,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
         try {
             return JsonConverter.convertToAttributesProto(new JsonParser().parse(ProtoConverter.dynamicMsgToJson(bytes, attributesDynamicMessageDescriptor)));
         } catch (Exception e) {
-            log.warn("Failed to decode post attributes request", e);
+            log.debug("Failed to decode post attributes request", e);
             throw new AdaptorException(e);
         }
     }
@@ -76,7 +76,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
         try {
             return ProtoConverter.convertToClaimDeviceProto(ctx.getDeviceId(), bytes);
         } catch (InvalidProtocolBufferException e) {
-            log.warn("Failed to decode claim device request", e);
+            log.debug("Failed to decode claim device request", e);
             throw new AdaptorException(e);
         }
     }
@@ -89,7 +89,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
             int requestId = getRequestId(topicName, topicBase);
             return ProtoConverter.convertToGetAttributeRequestMessage(bytes, requestId);
         } catch (InvalidProtocolBufferException e) {
-            log.warn("Failed to decode get attributes request", e);
+            log.debug("Failed to decode get attributes request", e);
             throw new AdaptorException(e);
         }
     }
@@ -105,7 +105,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
             JsonElement response = new JsonParser().parse(ProtoConverter.dynamicMsgToJson(bytes, rpcResponseDynamicMessageDescriptor));
             return TransportProtos.ToDeviceRpcResponseMsg.newBuilder().setRequestId(requestId).setPayload(response.toString()).build();
         } catch (Exception e) {
-            log.warn("Failed to decode rpc response", e);
+            log.debug("Failed to decode rpc response", e);
             throw new AdaptorException(e);
         }
     }
@@ -118,7 +118,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
             int requestId = getRequestId(topicName, topicBase);
             return ProtoConverter.convertToServerRpcRequest(bytes, requestId);
         } catch (InvalidProtocolBufferException e) {
-            log.warn("Failed to decode to server rpc request", e);
+            log.debug("Failed to decode to server rpc request", e);
             throw new AdaptorException(e);
         }
     }
@@ -129,7 +129,7 @@ public class ProtoMqttAdaptor implements MqttTransportAdaptor {
         try {
             return ProtoConverter.convertToProvisionRequestMsg(bytes);
         } catch (InvalidProtocolBufferException ex) {
-            log.warn("Failed to decode provision request", ex);
+            log.debug("Failed to decode provision request", ex);
             throw new AdaptorException(ex);
         }
     }

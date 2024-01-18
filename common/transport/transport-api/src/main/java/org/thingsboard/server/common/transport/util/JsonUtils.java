@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.thingsboard.server.gen.transport.TransportProtos.KeyValueProto;
+
 import java.util.List;
 
 public class JsonUtils {
@@ -52,4 +53,5 @@ public class JsonUtils {
     public static JsonElement parse(String params) {
         return jsonParser.parse(params);
     }
+
 }

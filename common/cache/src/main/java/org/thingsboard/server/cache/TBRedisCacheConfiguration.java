@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,50 +26,63 @@ import org.springframework.core.convert.converter.ConverterRegistry;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisNode;
 import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.format.support.DefaultFormattingConversionService;
 import org.springframework.util.Assert;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.id.EntityId;
 import redis.clients.jedis.JedisPoolConfig;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 @Configuration
-@ConditionalOnProperty(prefix = "cache", value = "type", havingValue = "redis", matchIfMissing = false)
+@ConditionalOnProperty(prefix = "cache", value = "type", havingValue = "redis")
 @EnableCaching
 @Data
 public abstract class TBRedisCacheConfiguration {
 
-    @Value("${redis.pool_config.maxTotal}")
+    private static final String COMMA = ",";
+    private static final String COLON = ":";
+
+    @Value("${redis.evictTtlInMs:60000}")
+    private int evictTtlInMs;
+
+    @Value("${redis.pool_config.maxTotal:128}")
     private int maxTotal;
 
-    @Value("${redis.pool_config.maxIdle}")
+    @Value("${redis.pool_config.maxIdle:128}")
     private int maxIdle;
 
-    @Value("${redis.pool_config.minIdle}")
+    @Value("${redis.pool_config.minIdle:16}")
     private int minIdle;
 
-    @Value("${redis.pool_config.testOnBorrow}")
+    @Value("${redis.pool_config.testOnBorrow:true}")
     private boolean testOnBorrow;
 
-    @Value("${redis.pool_config.testOnReturn}")
+    @Value("${redis.pool_config.testOnReturn:true}")
     private boolean testOnReturn;
 
-    @Value("${redis.pool_config.testWhileIdle}")
+    @Value("${redis.pool_config.testWhileIdle:true}")
     private boolean testWhileIdle;
 
-    @Value("${redis.pool_config.minEvictableMs}")
+    @Value("${redis.pool_config.minEvictableMs:60000}")
     private long minEvictableMs;
 
-    @Value("${redis.pool_config.evictionRunsMs}")
+    @Value("${redis.pool_config.evictionRunsMs:30000}")
     private long evictionRunsMs;
 
-    @Value("${redis.pool_config.maxWaitMills}")
+    @Value("${redis.pool_config.maxWaitMills:60000}")
     private long maxWaitMills;
 
-    @Value("${redis.pool_config.numberTestsPerEvictionRun}")
+    @Value("${redis.pool_config.numberTestsPerEvictionRun:3}")
     private int numberTestsPerEvictionRun;
 
-    @Value("${redis.pool_config.blockWhenExhausted}")
+    @Value("${redis.pool_config.blockWhenExhausted:true}")
     private boolean blockWhenExhausted;
 
     @Bean
@@ -114,11 +127,26 @@ public abstract class TBRedisCacheConfiguration {
         poolConfig.setTestOnBorrow(testOnBorrow);
         poolConfig.setTestOnReturn(testOnReturn);
         poolConfig.setTestWhileIdle(testWhileIdle);
-        poolConfig.setMinEvictableIdleTimeMillis(minEvictableMs);
-        poolConfig.setTimeBetweenEvictionRunsMillis(evictionRunsMs);
+        poolConfig.setSoftMinEvictableIdleTime(Duration.ofMillis(minEvictableMs));
+        poolConfig.setTimeBetweenEvictionRuns(Duration.ofMillis(evictionRunsMs));
         poolConfig.setMaxWaitMillis(maxWaitMills);
         poolConfig.setNumTestsPerEvictionRun(numberTestsPerEvictionRun);
         poolConfig.setBlockWhenExhausted(blockWhenExhausted);
         return poolConfig;
+    }
+
+    protected List<RedisNode> getNodes(String nodes) {
+        List<RedisNode> result;
+        if (StringUtils.isBlank(nodes)) {
+            result = Collections.emptyList();
+        } else {
+            result = new ArrayList<>();
+            for (String hostPort : nodes.split(COMMA)) {
+                String host = hostPort.split(COLON)[0];
+                int port = Integer.parseInt(hostPort.split(COLON)[1]);
+                result.add(new RedisNode(host, port));
+            }
+        }
+        return result;
     }
 }

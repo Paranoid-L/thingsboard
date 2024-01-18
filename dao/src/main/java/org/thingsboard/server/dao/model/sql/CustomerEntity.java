@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.dao.model.BaseSqlEntity;
 import org.thingsboard.server.dao.model.ModelConstants;
-import org.thingsboard.server.dao.model.SearchTextEntity;
 import org.thingsboard.server.dao.util.mapping.JsonStringType;
 
 import javax.persistence.Column;
@@ -37,18 +36,15 @@ import java.util.UUID;
 @EqualsAndHashCode(callSuper = true)
 @Entity
 @TypeDef(name = "json", typeClass = JsonStringType.class)
-@Table(name = ModelConstants.CUSTOMER_COLUMN_FAMILY_NAME)
-public final class CustomerEntity extends BaseSqlEntity<Customer> implements SearchTextEntity<Customer> {
+@Table(name = ModelConstants.CUSTOMER_TABLE_NAME)
+public final class CustomerEntity extends BaseSqlEntity<Customer> {
 
     @Column(name = ModelConstants.CUSTOMER_TENANT_ID_PROPERTY)
     private UUID tenantId;
     
     @Column(name = ModelConstants.CUSTOMER_TITLE_PROPERTY)
     private String title;
-    
-    @Column(name = ModelConstants.SEARCH_TEXT_PROPERTY)
-    private String searchText;
-    
+
     @Column(name = ModelConstants.COUNTRY_PROPERTY)
     private String country;
     
@@ -77,6 +73,9 @@ public final class CustomerEntity extends BaseSqlEntity<Customer> implements Sea
     @Column(name = ModelConstants.CUSTOMER_ADDITIONAL_INFO_PROPERTY)
     private JsonNode additionalInfo;
 
+    @Column(name = ModelConstants.EXTERNAL_ID_PROPERTY)
+    private UUID externalId;
+
     public CustomerEntity() {
         super();
     }
@@ -97,23 +96,16 @@ public final class CustomerEntity extends BaseSqlEntity<Customer> implements Sea
         this.phone = customer.getPhone();
         this.email = customer.getEmail();
         this.additionalInfo = customer.getAdditionalInfo();
-    }
-
-    @Override
-    public String getSearchTextSource() {
-        return title;
-    }
-
-    @Override
-    public void setSearchText(String searchText) {
-        this.searchText = searchText;
+        if (customer.getExternalId() != null) {
+            this.externalId = customer.getExternalId().getId();
+        }
     }
 
     @Override
     public Customer toData() {
         Customer customer = new Customer(new CustomerId(this.getUuid()));
         customer.setCreatedTime(createdTime);
-        customer.setTenantId(new TenantId(tenantId));
+        customer.setTenantId(TenantId.fromUUID(tenantId));
         customer.setTitle(title);
         customer.setCountry(country);
         customer.setState(state);
@@ -124,6 +116,9 @@ public final class CustomerEntity extends BaseSqlEntity<Customer> implements Sea
         customer.setPhone(phone);
         customer.setEmail(email);
         customer.setAdditionalInfo(additionalInfo);
+        if (externalId != null) {
+            customer.setExternalId(new CustomerId(externalId));
+        }
         return customer;
     }
 

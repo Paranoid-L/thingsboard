@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 package org.thingsboard.server.transport.lwm2m.server;
 
+import com.google.gson.JsonParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.leshan.core.model.DDFFileParser;
@@ -24,6 +25,7 @@ import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel;
 import org.eclipse.leshan.core.node.codec.CodecException;
 import org.springframework.stereotype.Component;
+import org.thingsboard.server.common.data.util.TbDDFFileParser;
 import org.thingsboard.server.common.transport.TransportServiceCallback;
 import org.thingsboard.server.common.transport.auth.ValidateDeviceCredentialsResponse;
 import org.thingsboard.server.gen.transport.TransportProtos;
@@ -50,6 +52,7 @@ import static org.thingsboard.server.gen.transport.TransportProtos.KeyValueType.
 public class LwM2mTransportServerHelper {
 
     private final LwM2mTransportContext context;
+    private final static JsonParser JSON_PARSER = new JsonParser();
 
     public void sendParametersOnThingsboardAttribute(List<TransportProtos.KeyValueProto> result, SessionInfoProto sessionInfo) {
         PostAttributeMsg.Builder request = PostAttributeMsg.newBuilder();
@@ -140,9 +143,9 @@ public class LwM2mTransportServerHelper {
                 .build();
     }
 
-    public ObjectModel parseFromXmlToObjectModel(byte[] xmlByte, String streamName, DefaultDDFFileValidator ddfValidator) {
+    public ObjectModel parseFromXmlToObjectModel(byte[] xmlByte, String streamName) {
         try {
-            DDFFileParser ddfFileParser = new DDFFileParser(ddfValidator);
+            TbDDFFileParser ddfFileParser = new TbDDFFileParser();
             return ddfFileParser.parse(new ByteArrayInputStream(xmlByte), streamName).get(0);
         } catch (IOException | InvalidDDFFileException e) {
             log.error("Could not parse the XML file [{}]", streamName, e);
@@ -229,7 +232,11 @@ public class LwM2mTransportServerHelper {
             case STRING_V:
                 return kv.getStringV();
             case JSON_V:
-                return kv.getJsonV();
+                try {
+                    return JSON_PARSER.parse(kv.getJsonV());
+                } catch (Exception e) {
+                    return null;
+                }
         }
         return null;
     }

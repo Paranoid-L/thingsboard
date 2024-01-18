@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.thingsboard.server.service.ttl.EventsCleanUpService.RANDOM_DELAY_INTERVAL_MS_EXPRESSION;
 
@@ -42,7 +41,6 @@ public class EventsCleanUpServiceTest {
     public void givenInterval_whenRandomDelay_ThenDelayInInterval() {
         log.info("randomDelay {}", randomDelayMs);
         log.info("executionIntervalMs {}", executionIntervalMs);
-        assertThat(executionIntervalMs, is(2220000L));
         assertThat(randomDelayMs, greaterThanOrEqualTo(0L));
         assertThat(randomDelayMs, lessThanOrEqualTo(executionIntervalMs));
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,10 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.EqualsAndHashCode;
 import lombok.Setter;
 import lombok.ToString;
+import org.thingsboard.server.common.data.BaseDataWithAdditionalInfo;
 import org.thingsboard.server.common.data.HasCustomerId;
-import org.thingsboard.server.common.data.HasName;
+import org.thingsboard.server.common.data.HasLabel;
 import org.thingsboard.server.common.data.HasTenantId;
-import org.thingsboard.server.common.data.SearchTextBasedWithAdditionalInfo;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.EdgeId;
 import org.thingsboard.server.common.data.id.RuleChainId;
@@ -35,7 +35,7 @@ import org.thingsboard.server.common.data.validation.NoXss;
 @EqualsAndHashCode(callSuper = true)
 @ToString
 @Setter
-public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements HasName, HasTenantId, HasCustomerId {
+public class Edge extends BaseDataWithAdditionalInfo<EdgeId> implements HasLabel, HasTenantId, HasCustomerId {
 
     private static final long serialVersionUID = 4934987555236873728L;
 
@@ -57,12 +57,6 @@ public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements H
     @NoXss
     @Length(fieldName = "secret")
     private String secret;
-    @NoXss
-    @Length(fieldName = "edgeLicenseKey", max = 30)
-    private String edgeLicenseKey;
-    @NoXss
-    @Length(fieldName = "cloudEndpoint")
-    private String cloudEndpoint;
 
     public Edge() {
         super();
@@ -82,8 +76,6 @@ public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements H
         this.name = edge.getName();
         this.routingKey = edge.getRoutingKey();
         this.secret = edge.getSecret();
-        this.edgeLicenseKey = edge.getEdgeLicenseKey();
-        this.cloudEndpoint = edge.getCloudEndpoint();
     }
 
     public void update(Edge edge) {
@@ -95,8 +87,6 @@ public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements H
         this.name = edge.getName();
         this.routingKey = edge.getRoutingKey();
         this.secret = edge.getSecret();
-        this.edgeLicenseKey = edge.getEdgeLicenseKey();
-        this.cloudEndpoint = edge.getCloudEndpoint();
     }
 
     @ApiModelProperty(position = 1, value = "JSON object with the Edge Id. " +
@@ -108,25 +98,25 @@ public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements H
         return super.getId();
     }
 
-    @ApiModelProperty(position = 2, value = "Timestamp of the edge creation, in milliseconds", example = "1609459200000", readOnly = true)
+    @ApiModelProperty(position = 2, value = "Timestamp of the edge creation, in milliseconds", example = "1609459200000", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     @Override
     public long getCreatedTime() {
         return super.getCreatedTime();
     }
 
-    @ApiModelProperty(position = 3, value = "JSON object with Tenant Id. Use 'assignDeviceToTenant' to change the Tenant Id.", readOnly = true)
+    @ApiModelProperty(position = 3, value = "JSON object with Tenant Id. Use 'assignDeviceToTenant' to change the Tenant Id.", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     @Override
     public TenantId getTenantId() {
         return this.tenantId;
     }
 
-    @ApiModelProperty(position = 4, value = "JSON object with Customer Id. Use 'assignEdgeToCustomer' to change the Customer Id.", readOnly = true)
+    @ApiModelProperty(position = 4, value = "JSON object with Customer Id. Use 'assignEdgeToCustomer' to change the Customer Id.", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     @Override
     public CustomerId getCustomerId() {
         return this.customerId;
     }
 
-    @ApiModelProperty(position = 5, value = "JSON object with Root Rule Chain Id. Use 'setEdgeRootRuleChain' to change the Root Rule Chain Id.", readOnly = true)
+    @ApiModelProperty(position = 5, value = "JSON object with Root Rule Chain Id. Use 'setEdgeRootRuleChain' to change the Root Rule Chain Id.", accessMode = ApiModelProperty.AccessMode.READ_ONLY)
     public RuleChainId getRootRuleChainId() {
         return this.rootRuleChainId;
     }
@@ -147,11 +137,6 @@ public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements H
         return this.label;
     }
 
-    @Override
-    public String getSearchText() {
-        return getName();
-    }
-
     @ApiModelProperty(position = 9, required = true, value = "Edge routing key ('username') to authorize on cloud")
     public String getRoutingKey() {
         return this.routingKey;
@@ -160,16 +145,6 @@ public class Edge extends SearchTextBasedWithAdditionalInfo<EdgeId> implements H
     @ApiModelProperty(position = 10, required = true, value = "Edge secret ('password') to authorize on cloud")
     public String getSecret() {
         return this.secret;
-    }
-
-    @ApiModelProperty(position = 11, required = true, value = "Edge license key obtained from license portal", example = "AgcnI24Z06XC&m6Sxsdgf")
-    public String getEdgeLicenseKey() {
-        return this.edgeLicenseKey;
-    }
-
-    @ApiModelProperty(position = 12, required = true, value = "Edge uses this cloud URL to activate and periodically check it's license", example = "https://thingsboard.cloud")
-    public String getCloudEndpoint() {
-        return this.cloudEndpoint;
     }
 
 }

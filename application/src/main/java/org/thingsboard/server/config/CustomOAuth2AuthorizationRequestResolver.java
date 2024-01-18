@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,11 +33,12 @@ import org.springframework.security.web.util.UrlUtils;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponents;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.dao.oauth2.OAuth2Configuration;
 import org.thingsboard.server.dao.oauth2.OAuth2Service;
+import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.security.auth.oauth2.TbOAuth2ParameterNames;
 import org.thingsboard.server.service.security.model.token.OAuth2AppTokenFactory;
 import org.thingsboard.server.utils.MiscUtils;
@@ -51,6 +52,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@TbCoreComponent
 @Service
 @Slf4j
 public class CustomOAuth2AuthorizationRequestResolver implements OAuth2AuthorizationRequestResolver {

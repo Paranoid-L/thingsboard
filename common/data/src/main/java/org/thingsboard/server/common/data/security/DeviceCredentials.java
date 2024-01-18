@@ -1,5 +1,5 @@
 /**
- * Copyright © 2016-2021 The Thingsboard Authors
+ * Copyright © 2016-2024 The Thingsboard Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ public class DeviceCredentials extends BaseData<DeviceCredentialsId> implements 
         this.credentialsValue = deviceCredentials.getCredentialsValue();
     }
 
-    @ApiModelProperty(position = 1, required = true, readOnly = true, value = "The Id is automatically generated during device creation. " +
+    @ApiModelProperty(position = 1, required = true, accessMode = ApiModelProperty.AccessMode.READ_ONLY, value = "The Id is automatically generated during device creation. " +
             "Use 'getDeviceCredentialsByDeviceId' to obtain the id based on device id. " +
             "Use 'updateDeviceCredentials' to update device credentials. ", example = "784f394c-42b6-435a-983c-b7beff2784f9")
     @Override
@@ -112,5 +112,4 @@ public class DeviceCredentials extends BaseData<DeviceCredentialsId> implements 
                 + credentialsId + ", credentialsValue=" + credentialsValue + ", createdTime=" + createdTime + ", id="
                 + id + "]";
     }
-
 }
